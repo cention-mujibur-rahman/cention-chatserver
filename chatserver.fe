@@ -13,17 +13,8 @@ commandline.command('d','descriptors') using (args) {
 };
 
 chatserver.onRequest() using (req) {
-	string html = "<html><body><h1>OK</h1>Seems to be working.</body></html>";
-	array res = [
-		'HTTP/1.0 200 OK',
-		'Content-Type: text/html',
-		'Content-Length: ' + html.length(),
-		'',
-		html
-	];
-	
-	req.socket.print(res.join("\n"));
-	req.socket.flush();
+	req.contentType('text/html');
+	req.respond('<html><body><h1>OK</h1>Seems to be working.</body></html>');
 };
 
 EventLoop.listen();
