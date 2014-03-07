@@ -1,0 +1,29 @@
+#! /usr/bin/env ferite
+
+uses 'libweb/httpserver', 'libweb/consoleserver', 'sys';
+
+object commandline = new ConsoleServer();
+object chatserver = new HttpServer(9090);
+
+commandline.command('exit') using (args) {
+	Sys.exit(0);
+};
+commandline.command('d','descriptors') using (args) {
+	Console.println(EventLoop.descriptors.join("\n"));
+};
+
+chatserver.onRequest() using (req) {
+	string html = "<html><body><h1>OK</h1>Seems to be working.</body></html>";
+	array res = [
+		'HTTP/1.0 200 OK',
+		'Content-Type: text/html',
+		'Content-Length: ' + html.length(),
+		'',
+		html
+	];
+	
+	req.socket.print(res.join("\n"));
+	req.socket.flush();
+};
+
+EventLoop.listen();
