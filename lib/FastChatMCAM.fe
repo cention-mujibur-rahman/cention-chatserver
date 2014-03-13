@@ -237,7 +237,7 @@ namespace ChatMCAM {
 		array user_ids = [];
 		
 		Logger.info('>>>CHAT<<<','getUpdate called');
-		
+
 		if( currentUser.acceptChat ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentUser.username} [${currentUser.id}] - time since last update: " + (closure {
 				return Date.GMTnow() - currentUser.timestampLastChatUpdate;
@@ -662,8 +662,11 @@ namespace ChatMCAM {
 }
 
 
-function handleFastChatMCAMAction( array commands, array parameters ) {
-	Logger.info('>>>CHAT<<<','Entered handleFastChatMCAMAction');
+function handleFastChatMCAMAction( object req, array commands, array parameters ) {
+
+	// Quick workaround to handle multiple requests.
+	// TODO: replace global request variable with request parameter.	
+	request = req;
 
 	if( commands ) {
 		switch( commands[0] ) {
@@ -671,13 +674,11 @@ function handleFastChatMCAMAction( array commands, array parameters ) {
 				array channels = [];
 				
 				allowedToStoreSession = false;
-				Cache.page = new CentionMainPage();
-				Cache.page.setupFeatureSystem();
-				
+
 				ExternalQueueInterface.setup();
 				
 				GUIKit.isBackgroundEvent = true;
-				Request.current().contentType('text/json; charset=UTF-8');
+				req.contentType('text/json; charset=UTF-8');
 				
 				switch( commands[1] ) {
 					case 'GlobalChat.getUpdate':

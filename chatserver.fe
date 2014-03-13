@@ -1,20 +1,54 @@
 #! /usr/bin/env ferite
 
-uses 'libweb/httpserver', 'libweb/consoleserver', 'sys';
+uses 'libweb/httpserver', 'libweb/consoleserver', 'lib/FastChatMCAM', 'sys';
+
+global {
+	object oo;
+	string ss;
+	array aa;
+	number nn;
+}
+
+class DummyApplication {
+	string realName;
+	boolean topLevel;
+}
 
 object commandline = new ConsoleServer();
 object chatserver = new HttpServer(9090);
 
-commandline.command('exit') using (args) {
+application = new DummyApplication();
+application.realName = 'cention-suite';
+
+commandline.command('x','exit') using (args) {
 	Sys.exit(0);
 };
 commandline.command('d','descriptors') using (args) {
 	Console.println(EventLoop.descriptors.join("\n"));
 };
+commandline.command('p','print') using (args) {
+	monitor {
+		Console.println(eval('return ' + args.join(' ') + ';'));
+	}
+	handle {
+		Console.println('< SYNTAX ERROR >');
+	}
+};
 
 chatserver.onRequest() using (req) {
-	req.contentType('text/html');
-	req.respond('<html><body><h1>OK</h1>Seems to be working.</body></html>');
+	array commands = [ 'MCAM' , req.pathInfo() ];
+	
+	Console.println("\033[7m " + req.timestamp() + " \033[0m");
+	
+	if (req.request.method == 'POST') {
+		req.onPostData() using (req,content) {
+			req.query = req.parseQueryString(content);
+			req.respond(handleFastChatMCAMAction(req,commands,req.query));
+		};
+	}
+	else {
+		req.respond(handleFastChatMCAMAction(req,commands,req.query));
+	}
 };
 
 EventLoop.listen();
