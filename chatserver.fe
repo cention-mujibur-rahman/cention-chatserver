@@ -17,16 +17,18 @@ class DummyApplication {
 object commandline = new ConsoleServer();
 object chatserver = new HttpServer(9090);
 
+commandline.prompt('> ');
 application = new DummyApplication();
 application.realName = 'cention-suite';
 
-commandline.command('x','exit') using (args) {
+commandline.command('x','exit','quit') using (args) {
 	Sys.exit(0);
 };
 commandline.command('d','descriptors') using (args) {
 	Console.println(EventLoop.descriptors.join("\n"));
 };
-commandline.command('p','print') using (args) {
+commandline.command('unknown') using (args) {
+	// Eval ferite expression by default
 	monitor {
 		Console.println(eval('return ' + args.join(' ') + ';'));
 	}
@@ -38,7 +40,7 @@ commandline.command('p','print') using (args) {
 chatserver.onRequest() using (req) {
 	array commands = [ 'MCAM' , req.pathInfo() ];
 	
-	Console.println("\033[7m " + req.timestamp() + " \033[0m");
+	// Console.println("\033[7m " + req.timestamp() + " \033[0m");
 	
 	if (req.request.method == 'POST') {
 		req.onPostData() using (req,content) {
