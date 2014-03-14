@@ -2,6 +2,7 @@
 
 uses 'libweb/httpserver', 'libweb/consoleserver', 'lib/FastChatMCAM', 'sys';
 
+/* Placeholder globals for debugging */
 global {
 	object oo;
 	string ss;
@@ -63,14 +64,22 @@ chatserver.onRequest() using (req) {
 	
 	// Console.println("\033[7m " + req.timestamp() + " \033[0m");
 	
-	if (req.request.method == 'POST') {
-		req.onPostData() using (req,content) {
-			req.query = req.parseQueryString(content);
+	monitor {
+		if (req.request.method == 'POST') {
+			req.onPostData() using (req,content) {
+				req.query = req.parseQueryString(content);
+				req.respond(handleFastChatMCAMAction(req,commands,req.query));
+			};
+		}
+		else {
 			req.respond(handleFastChatMCAMAction(req,commands,req.query));
-		};
+		}
 	}
-	else {
-		req.respond(handleFastChatMCAMAction(req,commands,req.query));
+	handle {
+		Console.println("\033[41;33m##########[ERROR]##########\033[0m");
+		Console.print("\033[31m");
+		Console.println(err.str);
+		Console.println("\033[0m");
 	}
 };
 
