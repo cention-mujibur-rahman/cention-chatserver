@@ -1,2 +1,4 @@
 libweb
 tags
+.stats*
+stats.txt
