@@ -1,6 +1,8 @@
 #! /usr/bin/env ferite
 
-uses 'libweb/httpserver', 'libweb/consoleserver', 'lib/FastChatMCAM', 'sys';
+uses 'libweb/httpserver', 'libweb/consoleserver';
+uses 'lib/FastChatMCAM';
+uses 'sys', 'date';
 
 /* Placeholder globals for debugging */
 global {
@@ -8,6 +10,8 @@ global {
 	string ss;
 	array aa;
 	number nn;
+	number objSrvLastConnectionTime;
+	number TIMEOUT;
 }
 
 class DummyApplication {
@@ -24,6 +28,9 @@ function dumphash (array a) {
 
 object commandline = new ConsoleServer();
 object chatserver = new HttpServer(9090);
+
+objSrvLastConnectionTime = 0;
+TIMEOUT = 4.5 * 60;
 
 commandline.prompt('chatserver> ');
 application = new DummyApplication();
@@ -61,25 +68,25 @@ commandline.command('unknown') using (args) {
 
 chatserver.onRequest() using (req) {
 	array commands = [ 'MCAM' , req.pathInfo() ];
+	number now = Date.now();
 	
+	/* Make sure we have connection to objectserver before continuing */
+	if (now - objSrvLastConnectionTime > TIMEOUT) {
+		JSON.RPC.reconnect('localhost',8080);
+	}
+	objSrvLastConnectionTime = now;
+
 	// Console.println("\033[7m " + req.timestamp() + " \033[0m");
 	
-	monitor {
-		if (req.request.method == 'POST') {
-			req.onPostData() using (req,content) {
-				req.query = req.parseQueryString(content);
-				req.respond(handleFastChatMCAMAction(req,commands,req.query));
-			};
-		}
-		else {
+	if (req.request.method == 'POST') {
+		req.onPostData() using (req,content) {
+			req.query = req.parseQueryString(content);
 			req.respond(handleFastChatMCAMAction(req,commands,req.query));
-		}
+		};
 	}
-	handle {
-		Console.println("\033[41;33m##########[ERROR]##########\033[0m");
-		Console.print("\033[31m");
-		Console.println(err.str);
-		Console.println("\033[0m");
+	else {
+		req.respond(handleFastChatMCAMAction(req,commands,req.query));
+		Console.println('yyy');
 	}
 };
 
