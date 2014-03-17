@@ -1,0 +1,465 @@
+uses '../ChatConfig.feh';
+uses 'cmail';
+uses 'MailUtilities';
+uses 'objrunsrv-workflow';
+uses "logger";
+
+class ChatUpdate {
+	[rpc_import 'session:number' 'active:boolean' 'status:number' 'agentName:string', 'messages:array<ChatMessage>'];
+}
+class ChatMessage {
+	[rpc_import 'timestamp:number' 'sender:string' 'body:string', 'fromAgent:boolean', 'fromClient:boolean'];
+}
+class ChatSession {
+	[rpc_import 'id:number', 'timestampStarted:number', 'timestampAssigned:number', 'timestampEnded:number', 'messages:array<ChatMessage>'];
+}
+
+class ChatPage extends GUIKit.Page {
+	
+	[component MCAMTargetURL];
+	[component ChatOpen];
+	[component AgentsAvailable];
+	[component SessionSecret];
+	[component InitialData];
+	
+	[component ClosedViewTemplate];
+	[component NoAgentsViewTemplate];
+	[component StartViewTemplate];
+	[component ChatViewTemplate];
+	[component EmailViewTemplate];
+	[component AfterEmailViewTemplate];
+	//[component UnsupportedBrowserViewTemplate];
+	
+	string sessionSecret;
+	
+	[command 'status' status];
+	function status( array parameters ) {
+		// Documentation of status messages
+		// 1 - Open with available agents
+		// 2 - Open without available agents
+		// 3 - Closed
+		
+		number status;
+		string message;
+		
+		if( .chatOpen() ) {
+			number agentsAvailable;
+			SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+			agentsAvailable = SOAP.RPC.invoke('agentsAvailable', ['area_id' => ChatConfig.RPCTargetArea], 'number');
+			
+			status = 2;
+			message = 'Chat is open but no agents are available';
+			
+			if( agentsAvailable ) {
+				status = 1;
+				message = 'Chat is open with available agents';
+			}
+		} else {
+			status = 3;
+			message = 'Chat is closed';
+		}
+		
+		request.contentType('application/json; charset=utf8');
+		request.print(JSON.valueToJSON([
+			'status' => status,
+			'message' => message
+		]));
+		
+		return Core.exit();
+	}
+	
+	[command 'load/(secret:string)' load];
+	function load( array parameters ) {
+		.sessionSecret = parameters['secret'];
+	}
+	
+	static function getWrapperTemplateName() {
+		string customTemplatePath = application.filePath + 'Resources/Templates/CustomChat.template';
+		object stat = Posix.stat(customTemplatePath);
+		if( stat ) {
+			return 'CustomChat';
+		}
+		return 'DefaultChat';
+	}
+	
+	function requiredJavascript() {
+		return super.requiredJavascript().append(['chat']);
+	}
+
+	boolean immediatelyCreateSession = false;
+	[command 'create' create];
+    function create( array parameters ) {
+        .immediatelyCreateSession = true;
+    }
+	function pageLoaded() {
+		boolean chatOpen = false;
+		number agentsAvailable = 0;
+		object session = null;
+		string initialData;
+		array query;
+		
+		string customClosedViewTemplatePath = pathForTemplateResource('Custom/Chat/ClosedView');
+		string customNoAgentsViewTemplatePath = pathForTemplateResource('Custom/Chat/NoAgentsView');
+		string customStartViewTemplatePath = pathForTemplateResource('Custom/Chat/StartView');
+		string customChatViewTemplatePath = pathForTemplateResource('Custom/Chat/ChatView');
+		string customEmailViewTemplatePath = pathForTemplateResource('Custom/Chat/EmailView');
+		string customAfterEmailViewTemplatePath = pathForTemplateResource('Custom/Chat/AfterEmailView');
+		string customUnsupportedBrowserViewTemplatePath = pathForTemplateResource('Custom/Chat/UnsupportedBrowserView');
+		
+		string closedViewTemplatePath = (customClosedViewTemplatePath
+			? customClosedViewTemplatePath
+			: pathForTemplateResource('Default/Chat/ClosedView'));
+		string noAgentsViewTemplatePath = (customNoAgentsViewTemplatePath
+			? customNoAgentsViewTemplatePath
+			: pathForTemplateResource('Default/Chat/NoAgentsView'));
+		string startViewTemplatePath = (customStartViewTemplatePath
+			? customStartViewTemplatePath
+			: pathForTemplateResource('Default/Chat/StartView'));
+		string chatViewTemplatePath = (customChatViewTemplatePath
+			? customChatViewTemplatePath
+			: pathForTemplateResource('Default/Chat/ChatView'));
+		string emailViewTemplatePath = (customEmailViewTemplatePath
+			? customEmailViewTemplatePath
+			: pathForTemplateResource('Default/Chat/EmailView'));
+		string afterEmailViewTemplatePath = (customAfterEmailViewTemplatePath
+			? customAfterEmailViewTemplatePath
+			: pathForTemplateResource('Default/Chat/AfterEmailView'));
+		string unsupportedBrowserViewTemplatePath = (customUnsupportedBrowserViewTemplatePath
+			? customUnsupportedBrowserViewTemplatePath
+			: pathForTemplateResource('Default/Chat/UnsupportedBrowserView'));
+		
+		.ClosedViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(closedViewTemplatePath, []));
+		.NoAgentsViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(noAgentsViewTemplatePath, []));
+		.StartViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(startViewTemplatePath, []));
+		.ChatViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(chatViewTemplatePath, []));
+		.EmailViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(emailViewTemplatePath, []));
+		.AfterEmailViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(afterEmailViewTemplatePath, []));
+		//.UnsupportedBrowserViewTemplate.setTextValue(GUIKit.ViewTemplate.renderPath(unsupportedBrowserViewTemplatePath, []));
+		
+		if( .sessionSecret ) {
+			session = Workflow.ChatSession.bySecret(.sessionSecret);
+		}
+		else if( .immediatelyCreateSession ) {
+            object update;
+            chatOpen = .chatOpen();
+			if( chatOpen ) {
+				SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+				agentsAvailable = SOAP.RPC.invoke('agentsAvailable', ['area_id' => ChatConfig.RPCTargetArea], 'number');
+				if( agentsAvailable ) {
+					query = request.query();            
+            		update = SOAP.RPC.invoke('createWithData', [
+                            'area_id' => ChatConfig.RPCTargetArea,
+                            'name' => query['name'],
+                            'email' => query['email'],
+                            'question' => query['question'],
+                            'data'  => query['data']
+                    ], 'ChatUpdate');
+            		session = Workflow.ChatSession.load( update.session );
+            	}
+			}
+            
+        }
+		
+		if( session ) {
+			initialData = JSON.valueToJSON([
+				'sessionSecret' => session.secret,
+				'sessionID' => session.id,
+				'active' => session.active,
+				'status' => session.status,
+				'agentName' => (session.user ? (session.user.chatName ? session.user.chatName : session.user.username) : ''),
+				'clientName' => session.client.name,
+				'messages' => (closure {
+					array list = [];
+					Workflow.ChatMessage.listBySessionAfterTimestamp(session.id, 0).each() using ( message ) {
+						list[] = [
+							'sent' => message.timestampSent,
+							'sentHuman' => .formatDate(message.timestampSent),
+							'sender' => (message.user
+								? (message.user.chatName ? message.user.chatName : message.user.username)
+								: (session.client ? session.client.name : I('No Name'))),
+							'body' => message.message,
+							'fromAgent' => (message.user ? true : false),
+							'fromClient' => (message.client ? true : false)
+						];
+					};
+					return list;
+				}).invoke()
+			]);
+		} else {
+			chatOpen = .chatOpen();
+			if( chatOpen ) {
+				SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+				agentsAvailable = SOAP.RPC.invoke('agentsAvailable', ['area_id' => ChatConfig.RPCTargetArea], 'number');
+			
+				if( not agentsAvailable ) {
+					object data = new Workflow.ReportChatData();
+					data.setValue('area_id', ChatConfig.RPCTargetArea);
+					data.setValue('timestamp_when', Date.GMTnow());
+					data.setValue('rejected_unavailable', true);
+					data.save();
+				}
+			} else {
+				object data = new Workflow.ReportChatData();
+				data.setValue('area_id', ChatConfig.RPCTargetArea);
+				data.setValue('timestamp_when', Date.GMTnow());
+				data.setValue('rejected_closed', true);
+				data.save();
+			}
+		}
+		
+		.ChatOpen.setTextValue('' + chatOpen);
+		.AgentsAvailable.setTextValue('' + agentsAvailable);
+		.SessionSecret.setTextValue((session ? "'${session.secret}'" : 0));
+		.InitialData.setTextValue((initialData ? initialData : '{}'));
+		
+		.MCAMTargetURL.setTextValue(ChatConfig.MCAMTargetURL);
+	}
+	
+	function formatDate( number date ) {
+		number localOffset = (Config.TimeZoneOffset * 60);
+		number localDate = date + localOffset + Date.timezone();
+		return Date.localDate(localDate).format(ChatConfig.DateFormat);
+	}
+	
+	function chatOpen() {
+		string currentWeekday = Date.localDate(Date.now()).format('%A');
+		string currentHour = Date.localDate(Date.now()).format('%H');
+		
+		if( ChatConfig.HoursOpen.keyExists(currentWeekday) and ChatConfig.HoursOpen[currentWeekday].valueExists(currentHour) )
+			return true;
+		
+		return false;
+	}
+	
+	function getMessageList( object update ) {
+		array list = [];
+		update.messages.each() using ( message ) {
+			if( message.fromAgent ) {
+				list[] = [
+					'sent' => message.timestamp,
+					'sentHuman' => .formatDate(message.timestamp),
+					'sender' => message.sender,
+					'body' => message.body,
+					'fromAgent' => message.fromAgent,
+					'fromClient' => message.fromClient
+				];
+			}
+		};
+		return list;
+	}
+	
+	[mcam_request StartChat];
+	function StartChat( array parameters ) {
+		if( .chatOpen() ) {
+			object update;
+			
+			SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+			update = SOAP.RPC.invoke('create', [
+					'area_id' => ChatConfig.RPCTargetArea,
+					'name' => parameters['name'],
+					'email' => parameters['email'],
+					'question' => parameters['question']
+				], 'ChatUpdate');
+			
+			if( update.session > 0 ) {
+				object data = new Workflow.ReportChatData();
+				data.setValue('area_id', ChatConfig.RPCTargetArea);
+				data.setValue('timestamp_when', Date.GMTnow());
+				data.setValue('accepted', true);
+				data.save();
+			} else {
+				object data = new Workflow.ReportChatData();
+				data.setValue('area_id', ChatConfig.RPCTargetArea);
+				data.setValue('timestamp_when', Date.GMTnow());
+				data.setValue('rejected_unavailable', true);
+				data.save();
+			}
+			
+			return JSON.valueToJSON([
+				'sessionSecret' => '',
+				'sessionID' => update.session,
+				'active' => update.active,
+				'status' => update.status,
+				'agentName' => update.agentName,
+				'messages' => .getMessageList(update)
+			]);
+		}
+		return JSON.valueToJSON([ 'closed' => true ]);
+	}
+	
+	[mcam_request GetUpdate];
+	function GetUpdate( array parameters ) {
+		if( parameters.keyExists('session') and parameters.keyExists('timestamp') ) {
+			number session_id = parameters['session'].toNumber();
+			number timestamp = parameters['timestamp'].toNumber();
+			
+			object session = Workflow.ChatSession.load(session_id);
+			if( session ) {
+				array messages = [];
+				if( parameters.keyExists('preview') ) {
+					session.setValue('nextClientMessagePreview', parameters['preview']);
+				}
+				session.setValue('timestampLastClientUpdate', Date.GMTnow());
+				session.save();
+				Workflow.ChatMessage.listBySessionAfterTimestamp(session.id, timestamp).each() using ( message ) {
+					if( message.user ) {
+						messages[] = [
+							'sent' => message.timestampSent,
+							'sentHuman' => .formatDate(message.timestampSent),
+							'sender' => (message.user.chatName ? message.user.chatName : message.user.username),
+							'body' => message.message,
+							'fromAgent' => true,
+							'fromClient' => false
+						];
+					}
+				};
+				return JSON.valueToJSON([
+					'session' => session.id,
+					'active' => session.active,
+					'status' => session.status,
+					'agentName' => (session.user ? (session.user.chatName ? session.user.chatName : session.user.username) : ''),
+					'messages' => messages
+				]);
+			}
+		}
+		return JSON.valueToJSON([ 'error' => true ]);
+	}
+	
+	
+	[mcam_request SendMessage];
+	function SendMessage( array parameters ) {
+		if( parameters.keyExists('session') and parameters.keyExists('message') ) {
+			object session = Workflow.ChatSession.load(parameters['session'].toNumber());
+			if( session and session.active ) {
+				object message = new Workflow.ChatMessage();
+				message.setValue('timestampSent', Date.GMTnow());
+				message.setValue('message', parameters['message']);
+				message.setValue('session', session.id);
+				message.setValue('client', session.client);
+				message.save();
+				if( message.timestampSent > session.timestampLastClientMessageSent ) {
+					session.setValue('timestampLastClientMessageSent', message.timestampSent);
+				}
+				session.setValue('hasUnseenMessages', true);
+				session.setValue('nextClientMessagePreview', '');
+				session.save();
+				return JSON.valueToJSON([ 'session' => session.id, 'active' => session.active ]);
+			}
+		}
+		return JSON.valueToJSON([ 'error' => true ]);
+	}
+	
+	[mcam_request SendEmail];
+	function SendEmail( array parameters ) {
+		object connection = new Mail.Connection();
+		object message = new Mail.Message();
+		object content = new Mail.MessagePart();
+		
+		object to;
+		object from;
+		object reply_to;
+		
+		object logClosure;
+		object file;
+		
+		to = new Mail.Address(ChatConfig.ToEmailAddress);
+		
+		from = new Mail.Address(parameters['email']);
+		from.name = parameters['name'];
+		
+		reply_to = new Mail.Address(parameters['email']);
+		reply_to.name = parameters['name'];
+		
+		message.header = new Mail.MessageHeader();
+		message.header.to.add(to);
+		message.header.from.add(from);
+		message.header.reply_to.add(reply_to);
+		message.header.subject = ChatConfig.EmailSubject;
+		
+		content.type = Mail.Mime.TYPETEXT;
+		content.subtype = "plain";
+		content.charset = "UTF-8";
+		content.content = [
+			'Name: ' + parameters['name'],
+			'E-mail: ' + parameters['email'],
+			'Question: ' + parameters['question'] ].join("\n");
+		
+		message.content = content;
+		
+		/*
+		file = File.create('/cention/logs/chat.log');
+		logClosure = closure( string text ) {
+			file.writeln(text);
+		};
+		
+		Mail.registerOutput( closure(number type, string value) {
+			if( type >= Mail.OUTPUT_NORMAL ) {
+				string output = "[mail-module.${Mail.outputTypeToString(type)}] $value";
+				file.writeln(output);
+			}
+		});
+		*/
+		
+		MailUtilities.sendMessage(connection, message, logClosure);
+	}
+	
+	/*
+	function _hexToString( string hex ) {
+		string s;
+		for( number i = 0; i < hex.length() - 1; i += 2 ) {
+			s += String.numberToByte((hex[i] + hex[i + 1]).hexStringToNumber());
+		}
+		return s;
+	}
+	*/
+	
+	[command 'save/(sid:number)' downloadSessionHistory];
+	function downloadSessionHistory( array values ) {
+		object session;
+		string content;
+		number sid = values['sid'];
+		SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+		session = SOAP.RPC.invoke('getSessionHistory', ['session_id' => sid], 'ChatSession');
+		if( session ) {
+			session.messages.each() using ( message ) {
+				content += "(${formatDateTime(message.timestamp)}) ${message.sender}: ${message.body}\r\n";
+			};
+		}
+		request.disableDeflate();
+		request.outHeaders('Content-Description', 'File Transfer');
+		request.outHeaders('Content-Length', '' + content.length());
+		request.outHeaders('Content-Disposition', "attachment; filename=\"${ChatConfig.HistoryFileName}\"");
+		request.contentType("text/plain");
+		request.print(content);
+		return Core.exit();
+	}
+
+	[command 'print/(sid:number)' printSessionHistory];
+	function printSessionHistory( array values ) {
+		object session;
+		string content;
+		number sid = values['sid'];
+		SOAP.RPC.setDefaults(ChatConfig.RPCEndPoint);
+		session = SOAP.RPC.invoke('getSessionHistory', ['session_id' => sid], 'ChatSession');
+		content += '<html>';
+		content += '<head>';
+		content += '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
+		content += '<title>Chat History</title>';
+		content += '</head>';
+		content += '<body>';
+		if( session and session.messages ) {
+			session.messages.each() using ( message ) {
+				content += "(${formatDateTime(message.timestamp)}) ${message.sender}: ${message.body}<br>";
+			};
+		}
+		content += '<script type="text/javascript">window.print();</script>';
+		content += '</body>';
+		content += '</html>';
+		request.disableDeflate();
+		request.outHeaders('Content-Length', '' + content.length());
+		request.contentType("text/html");
+		request.print(content);
+		return Core.exit();
+	}
+}
+return ChatPage;
