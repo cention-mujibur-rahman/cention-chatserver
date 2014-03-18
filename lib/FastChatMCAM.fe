@@ -236,8 +236,6 @@ namespace ChatMCAM {
 		array area_ids = [];
 		array user_ids = [];
 		
-		Logger.info('>>>CHAT<<<','getUpdate called');
-
 		if( currentUser.acceptChat ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentUser.username} [${currentUser.id}] - time since last update: " + (closure {
 				return Date.GMTnow() - currentUser.timestampLastChatUpdate;
@@ -661,95 +659,96 @@ namespace ChatMCAM {
 	
 }
 
-
-function handleFastChatMCAMAction( object req, array commands, array parameters ) {
-
-	// Quick workaround to handle multiple requests.
-	// TODO: replace global request variable with request parameter.	
-	request = req;
-	monitor {
-	if( commands ) {
-		switch( commands[0] ) {
-			case 'MCAM': {
-				array channels = [];
-				
-				allowedToStoreSession = false;
-
-				ExternalQueueInterface.setup();
-				
-				GUIKit.isBackgroundEvent = true;
-				req.contentType('text/json; charset=UTF-8');
-				
-				switch( commands[1] ) {
-					case 'GlobalChat.getUpdate':
-					case 'StandaloneChat.getUpdate':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getUpdate(parameters));
-						break;
-					case 'GlobalChat.sendMessage':
-					case 'StandaloneChat.sendMessage':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.sendMessage(parameters));
-						break;
-					case 'GlobalChat.getAgents':
-					case 'StandaloneChat.getAgents':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAgents(parameters));
-						break;
-					case 'GlobalChat.forwardToAgent':
-					case 'StandaloneChat.forwardToAgent':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToAgent(parameters));
-						break;
-					case 'GlobalChat.forwardToArea':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToArea(parameters));
-						break;
-					case 'GlobalChat.getAlternativeAnswers':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAlternativeAnswers(parameters));
-						break;	
-					case 'GlobalChat.getOpenExternalPopupOption':
-					case 'StandaloneChat.getOpenExternalPopupOption':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getOpenExternalPopupOption(parameters));
-						break;
-					case 'GlobalChat.finishSession':
-					case 'StandaloneChat.finishSession':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishSession(parameters));
-						break;
-					case 'GlobalChat.displayTagList':
-					case 'StandaloneChat.displayTagList':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.displayTagList(parameters));
-						break;
-					case 'GlobalChat.acquireSession':
-					case 'StandaloneChat.acquireSession':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.acquireSession(parameters));
-						break;
-					case 'GlobalChat.markAsSeen':
-					case 'StandaloneChat.markAsSeen':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.markAsSeen(parameters));
-						break;
-					case 'GlobalChat.fetchContacts':
-					case 'StandaloneChat.fetchContacts':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.fetchContacts(parameters));
-						break;
-					case 'GlobalChat.fetchTagList':
-					case 'StandaloneChat.fetchTagList':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.fetchTagList(parameters));
-						break;
-					case 'GlobalChat.finishChatSessionTag':
-					case 'StandaloneChat.finishChatSessionTag':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishChatSessionTag(parameters));
-						break;
+namespace InternalChat {
+	function handleChatRequest ( object req, array commands, array parameters ) {
+	
+		// Quick workaround to handle multiple requests.
+		// TODO: replace global request variable with request parameter.	
+		request = req;
+		monitor {
+		if( commands ) {
+			switch( commands[0] ) {
+				case 'MCAM': {
+					array channels = [];
+					
+					allowedToStoreSession = false;
+	
+					ExternalQueueInterface.setup();
+					
+					GUIKit.isBackgroundEvent = true;
+					req.contentType('text/json; charset=UTF-8');
+					
+					switch( commands[1] ) {
+						case 'GlobalChat.getUpdate':
+						case 'StandaloneChat.getUpdate':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getUpdate(parameters));
+							break;
+						case 'GlobalChat.sendMessage':
+						case 'StandaloneChat.sendMessage':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.sendMessage(parameters));
+							break;
+						case 'GlobalChat.getAgents':
+						case 'StandaloneChat.getAgents':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAgents(parameters));
+							break;
+						case 'GlobalChat.forwardToAgent':
+						case 'StandaloneChat.forwardToAgent':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToAgent(parameters));
+							break;
+						case 'GlobalChat.forwardToArea':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToArea(parameters));
+							break;
+						case 'GlobalChat.getAlternativeAnswers':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAlternativeAnswers(parameters));
+							break;	
+						case 'GlobalChat.getOpenExternalPopupOption':
+						case 'StandaloneChat.getOpenExternalPopupOption':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getOpenExternalPopupOption(parameters));
+							break;
+						case 'GlobalChat.finishSession':
+						case 'StandaloneChat.finishSession':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishSession(parameters));
+							break;
+						case 'GlobalChat.displayTagList':
+						case 'StandaloneChat.displayTagList':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.displayTagList(parameters));
+							break;
+						case 'GlobalChat.acquireSession':
+						case 'StandaloneChat.acquireSession':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.acquireSession(parameters));
+							break;
+						case 'GlobalChat.markAsSeen':
+						case 'StandaloneChat.markAsSeen':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.markAsSeen(parameters));
+							break;
+						case 'GlobalChat.fetchContacts':
+						case 'StandaloneChat.fetchContacts':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.fetchContacts(parameters));
+							break;
+						case 'GlobalChat.fetchTagList':
+						case 'StandaloneChat.fetchTagList':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.fetchTagList(parameters));
+							break;
+						case 'GlobalChat.finishChatSessionTag':
+						case 'StandaloneChat.finishChatSessionTag':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishChatSessionTag(parameters));
+							break;
+					}
+					
+					return HTML.MCAMEnvelope(channels.join(','));
 				}
-				
-				return HTML.MCAMEnvelope(channels.join(','));
+				default:
+					return "";
+	
 			}
-			default:
-				return "";
-
+		}}
+		handle {
+			Console.println("\033[41;33m##########[ERROR]##########\033[0m");
+			Console.print("\033[31m");
+			Console.println(err.str);
+			Console.println("\033[0m");
+			return "";
 		}
-	}}
-	handle {
-		Console.println("\033[41;33m##########[ERROR]##########\033[0m");
-		Console.print("\033[31m");
-		Console.println(err.str);
-		Console.println("\033[0m");
-		return "";
 	}
 }
 
