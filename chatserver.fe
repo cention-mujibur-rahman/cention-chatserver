@@ -66,6 +66,7 @@ commandline.command('unknown') using (args) {
 	}
 };
 
+chatserver.sync_post = true;
 chatserver.onRequest() using (req) {
 	array commands = [ 'MCAM' , req.pathInfo() ];
 	number now = Date.now();
@@ -76,18 +77,7 @@ chatserver.onRequest() using (req) {
 	}
 	objSrvLastConnectionTime = now;
 
-	// Console.println("\033[7m " + req.timestamp() + " \033[0m");
-	
-	if (req.request.method == 'POST') {
-		req.onPostData() using (req,content) {
-			req.query = req.parseQueryString(content);
-			req.respond(handleFastChatMCAMAction(req,commands,req.query));
-		};
-	}
-	else {
-		req.respond(handleFastChatMCAMAction(req,commands,req.query));
-		Console.println('yyy');
-	}
+	req.respond(InternalChat.handleChatRequest(req,commands,req.query));
 };
 
 EventLoop.listen();
