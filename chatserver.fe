@@ -2,6 +2,7 @@
 
 uses 'libweb/httpserver', 'libweb/consoleserver';
 uses 'lib/FastChatMCAM';
+uses 'lib/ExternalChat';
 uses 'sys', 'date';
 
 /* Placeholder globals for debugging */
@@ -26,8 +27,19 @@ function dumphash (array a) {
 	return '';
 }
 
+function checkRpcConnection () {
+	number now = Date.now();
+	
+	/* Make sure we have connection to objectserver before continuing */
+	if (now - objSrvLastConnectionTime > TIMEOUT) {
+		JSON.RPC.reconnect('localhost',8080);
+	}
+	objSrvLastConnectionTime = now;
+}
+
 object commandline = new ConsoleServer();
 object chatserver = new HttpServer(9090);
+object externalchat = new HttpServer(9191);
 
 objSrvLastConnectionTime = 0;
 TIMEOUT = 4.5 * 60;
@@ -69,15 +81,20 @@ commandline.command('unknown') using (args) {
 chatserver.sync_post = true;
 chatserver.onRequest() using (req) {
 	array commands = [ 'MCAM' , req.pathInfo() ];
-	number now = Date.now();
 	
-	/* Make sure we have connection to objectserver before continuing */
-	if (now - objSrvLastConnectionTime > TIMEOUT) {
-		JSON.RPC.reconnect('localhost',8080);
-	}
-	objSrvLastConnectionTime = now;
+	checkRpcConnection();
 
 	req.respond(InternalChat.handleChatRequest(req,commands,req.query));
+};
+
+externalchat.sync_post = true;
+externalchat.onRequest() using (req) {
+array commands = [ 'MCAM' , req.pathInfo() ];
+	number now = Date.now();
+	
+	checkRpcConnection();
+
+	req.respond(ExternalChat.handleChatRequest(req,commands,req.query));	
 };
 
 EventLoop.listen();

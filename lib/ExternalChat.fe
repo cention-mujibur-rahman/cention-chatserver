@@ -1,4 +1,4 @@
-uses '../ChatConfig.feh';
+uses 'ChatConfig.feh';
 uses 'cmail';
 uses 'MailUtilities';
 uses 'objrunsrv-workflow';
