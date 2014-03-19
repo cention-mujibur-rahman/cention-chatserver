@@ -3,8 +3,51 @@ uses 'cmail';
 uses 'MailUtilities';
 uses 'objrunsrv-workflow';
 
+class ChatUpdate {
+	[rpc_import 'session:number' 'active:boolean' 'status:number' 'agentName:string', 'messages:array<ChatMessage>'];
+}
+class ChatMessage {
+	[rpc_import 'timestamp:number' 'sender:string' 'body:string', 'fromAgent:boolean', 'fromClient:boolean'];
+}
+class ChatSession {
+	[rpc_import 'id:number', 'timestampStarted:number', 'timestampAssigned:number', 'timestampEnded:number', 'messages:array<ChatMessage>'];
+}
+
 namespace ChatPage {
 	string sessionSecret;
+	
+	function formatDate( number date ) {
+		number localOffset = (Config.TimeZoneOffset * 60);
+		number localDate = date + localOffset + Date.timezone();
+		return Date.localDate(localDate).format(ChatConfig.DateFormat);
+	}
+	
+	function chatOpen() {
+		string currentWeekday = Date.localDate(Date.now()).format('%A');
+		string currentHour = Date.localDate(Date.now()).format('%H');
+		
+		if( ChatConfig.HoursOpen.keyExists(currentWeekday) and ChatConfig.HoursOpen[currentWeekday].valueExists(currentHour) )
+			return true;
+		
+		return false;
+	}
+	
+	function getMessageList( object update ) {
+		array list = [];
+		update.messages.each() using ( message ) {
+			if( message.fromAgent ) {
+				list[] = [
+					'sent' => message.timestamp,
+					'sentHuman' => .formatDate(message.timestamp),
+					'sender' => message.sender,
+					'body' => message.body,
+					'fromAgent' => message.fromAgent,
+					'fromClient' => message.fromClient
+				];
+			}
+		};
+		return list;
+	}
 	
 	function startChat( array parameters ) {
 		if( .chatOpen() ) {
@@ -111,7 +154,7 @@ namespace ExternalChat {
 		// Quick workaround to handle multiple requests.
 		// TODO: replace global request variable with request parameter.	
 		request = req;
-		monitor {
+		//monitor {
 		if( commands ) {
 			switch( commands[0] ) {
 				case 'MCAM': {
@@ -125,15 +168,13 @@ namespace ExternalChat {
 					req.contentType('text/json; charset=UTF-8');
 					
 					switch( commands[1] ) {
-						case 'GlobalChat.getUpdate':
-						case 'StandaloneChat.getUpdate':
+						case 'GetUpdate':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatPage.getUpdate(parameters));
 							break;
-						case 'GlobalChat.sendMessage':
-						case 'StandaloneChat.sendMessage':
+						case 'SendMessage':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatPage.sendMessage(parameters));
 							break;
-						case 'GlobalChat.startChat':
+						case 'StartChat':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatPage.startChat(parameters));
 					}
 					
@@ -143,13 +184,14 @@ namespace ExternalChat {
 					return "";
 	
 			}
-		}}
+		}
+		/*}
 		handle {
 			Console.println("\033[41;33m##########[ERROR]##########\033[0m");
 			Console.print("\033[31m");
 			Console.println(err.str);
 			Console.println("\033[0m");
 			return "";
-		}
+		}*/
 	}
 }

@@ -242,7 +242,7 @@ namespace ChatMCAM {
 			}).invoke() + " (${Date.GMTnow()})");
 		}
 		currentUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		currentUser.delayedSave();
+		currentUser.save();
 		
 		if( parameters.keyExists('areas') ) {
 			parameters['areas'].toArray(',').each() using ( id ) {
@@ -665,7 +665,7 @@ namespace InternalChat {
 		// Quick workaround to handle multiple requests.
 		// TODO: replace global request variable with request parameter.	
 		request = req;
-		monitor {
+		//monitor {
 		if( commands ) {
 			switch( commands[0] ) {
 				case 'MCAM': {
@@ -741,14 +741,17 @@ namespace InternalChat {
 					return "";
 	
 			}
-		}}
+		}
+		/*}
 		handle {
 			Console.println("\033[41;33m##########[ERROR]##########\033[0m");
 			Console.print("\033[31m");
 			Console.println(err.str);
+			Console.println(err.stack);
 			Console.println("\033[0m");
+			Console.println("\n\n");
 			return "";
-		}
+		}*/
 	}
 }
 
