@@ -1,0 +1,139 @@
+uses 'console';
+uses 'network';
+uses 'regexp';
+uses 'JSON';
+uses 'libweb/tcpclient';
+
+/**
+ * @class AsyncJsonRPC
+ * @brief A set of services that provide rapid JSON parsing and RPC functions
+ */
+class AsyncJsonRPC extends TcpClient {
+	string host;
+	number port;
+	string url;
+	object json_output;
+	string userAgent = 'ferite-json-rpc-library';
+	number connectElapsedTime;
+	array headers;
+	string content;
+	
+	function constructor ( string host, number port, string url ) {
+		.host = host;
+		.port = port;
+		.url = url;
+		
+		super(host,port);
+	}
+
+	function request( string host, string url, string content ) {
+		array output;
+		output[] = "POST $url HTTP/1.1";
+		output[] = "User-Agent: ${JSON.RPC.userAgent}";
+		output[] = "Host: $host";
+		output[] = "Connection: Keep-Alive";
+		output[] = "Content-Type: application/json";
+		output[] = "Content-Length: ${content.length()}";
+		output[] = "Accept: application/json";
+		output[] = "";
+		output[] = content;
+		return output.join("\r\n");
+	}
+	
+	private function processContentLength () {
+		number buffer_length = .buffer.length();
+		number content_length = .headers['Content-Length'].toNumber();
+		
+		if (buffer_length >= content_length) {
+			if (buffer_length > content_length) {
+				.headers['Content'] = .buffer[.. content_length];
+				.buffer = .buffer[content_length+1 ..];
+			}
+			else {
+				.headers['Content'] = .buffer;
+				.buffer = '';
+			}
+			.handler.invoke(self);
+			.close();
+		}
+	}
+
+	function readResponse () {
+		if( .headers.size() == 0 ) {
+			object m = Regexp.match("\n\\s*\n",.buffer);
+			if (m) {
+				string header_text = .buffer[.. m.start()-1];
+				array lines = Regexp.split("\r*\n",header_text);
+				if (m.end() < .buffer.length()) {
+					.buffer = .buffer[m.end() ..];
+				}
+				else {
+					.buffer = '';
+				}
+				lines.each() using (line) {
+					object match = null;
+		
+					if( line and (match = Regexp.match("HTTP/1\.[10] ([0-9]+) ([A-Za-z ]+)", line)) ) {
+						.headers['Response-Code'] = match.capture(0).toNumber();
+						.headers['Response-Name'] = match.capture(1);
+					}
+					else if( line and (match = Regexp.match( "([^:]+): (.*)", line )) ) {
+						.headers[match.capture(0)] = match.capture(1);
+					}
+				};
+			}
+		}
+		if( .headers.size() ) {
+			.processContentLength();
+		}
+	}
+	
+	function handleRequest () {
+		.fillBuffer();
+		.readResponse();
+	}
+	
+	/**
+	 * @function sendRequest
+	 * @declaration function sendRequest( string host, number port, string url, string content )
+	 * @brief Send a HTTP request to a given host:port, url and content
+	 * @param string host The host to connect to
+	 * @param number port The port to connect to
+	 * @param string url The URL part to hand the request to
+	 * @param string content The POST content to send
+	 * @return An associated array of values representing the response. The keys will be the normal http headers, added with 'Content', 'Response-Code' and 'Response-Name'
+	 */
+	function sendRequest( string host, number port, string url, string content ) {
+		object handler = recipient();
+		if (handler) {
+			.handler = handler;
+		}
+		.print( .request(host, url, content) );
+		.socket.flush();
+	}
+	
+	/**
+	 * @function invoke
+	 * @declaration function invoke( string f, array parameters )
+	 * @brief Invoke a function using the defaults set in setDefaults
+	 * @param string f The function to invoke
+	 * @param array parameters A keyed array of values.
+	 * @return The return from the function call (the same as the return value for sendRequest)
+	 */
+	function invoke( string f, array parameters ) {
+		object handler = recipient();
+		array code = [];
+		array params = [];
+		if (handler) {
+			.handler = handler;
+		}
+		parameters.map() using ( key, value ) {
+			params[] = "\"$key\":${JSON.valueToJSON(value)}"; 
+		};
+		code[] = '"version" : "1.2"';
+		code[] = '"method" : "' + f + '"';
+		code[] = '"params" : { ' + params.join(', ') + ' }';
+		.sendRequest( .host, .port, .url, '{' + code.join(", ") + '}' );
+	}
+}
+
