@@ -3,14 +3,10 @@
 uses 'libweb/httpserver', 'libweb/consoleserver';
 uses 'lib/FastChatMCAM';
 uses 'lib/ExternalChat';
-uses 'sys', 'date';
+uses 'date';
+uses 'lib/DebugConsole';
 
-/* Placeholder globals for debugging */
 global {
-	object oo;
-	string ss;
-	array aa;
-	number nn;
 	number objSrvLastConnectionTime;
 	number TIMEOUT;
 }
@@ -18,13 +14,6 @@ global {
 class DummyApplication {
 	string realName;
 	boolean topLevel;
-}
-
-function dumphash (array a) {
-	a.map() using (k,v) {
-		Console.println("$k => $v");
-	};
-	return '';
 }
 
 function checkRpcConnection () {
@@ -37,64 +26,35 @@ function checkRpcConnection () {
 	objSrvLastConnectionTime = now;
 }
 
-object commandline = new ConsoleServer();
-object chatserver = new HttpServer(9090);
-object externalchat = new HttpServer(9191);
-
 objSrvLastConnectionTime = 0;
 TIMEOUT = 4.5 * 60;
 
-commandline.prompt('chatserver> ');
 application = new DummyApplication();
 application.realName = 'cention-suite';
 
-commandline.command('x','exit','quit') using (args) {
-	Sys.exit(0);
-};
-commandline.command('d','descriptors') using (args) {
-	Console.println(EventLoop.descriptors.join("\n"));
-};
-commandline.command('h','help') using (args) {
-	Console.println([
-		'help (h)       : Print this help',
-		'descriptor (d) : Print list of file descriptors in use',
-		'exit (x)       : Exit cleanly',
-		'clear          : Clears screen',
-		'',
-		'Typing a valid Ferite expression prints the value',
-		'of the expression.'
-	].join("\n"));
-};
-commandline.command('clear') using (args) {
-	Console.print("\033[2J\033[1;1H");
-};
-commandline.command('unknown') using (args) {
-	// Eval ferite expression by default
-	monitor {
-		Console.println(eval('return ' + args.join(' ') + ';'));
-	}
-	handle {
-		Console.println('< SYNTAX ERROR >');
-	}
-};
+{
+	object chatserver = new HttpServer(9090);
+	chatserver.sync_post = true;
+	chatserver.onRequest() using (req) {
+		array commands = [ 'MCAM' , req.pathInfo() ];
+		
+		checkRpcConnection();
+	
+		req.respond(InternalChat.handleChatRequest(req,commands,req.query));
+	};
+}
 
-chatserver.sync_post = true;
-chatserver.onRequest() using (req) {
+{
+	object externalchat = new HttpServer(9191);
+	externalchat.sync_post = true;
+	externalchat.onRequest() using (req) {
 	array commands = [ 'MCAM' , req.pathInfo() ];
+		number now = Date.now();
+		
+		checkRpcConnection();
 	
-	checkRpcConnection();
-
-	req.respond(InternalChat.handleChatRequest(req,commands,req.query));
-};
-
-externalchat.sync_post = true;
-externalchat.onRequest() using (req) {
-array commands = [ 'MCAM' , req.pathInfo() ];
-	number now = Date.now();
-	
-	checkRpcConnection();
-
-	req.respond(ExternalChat.handleChatRequest(req,commands,req.query));	
-};
+		req.respond(ExternalChat.handleChatRequest(req,commands,req.query));	
+	};
+}
 
 EventLoop.listen();
