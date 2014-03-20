@@ -27,7 +27,10 @@ while [ $# -gt 0 ];do
 			CMD="$1"
 			shift
 			;;
-		*)	HOST=$op
+		getUpdate)
+			CMD="$op"
+			;;
+		*)	HOST="$op"
 			;;
 	esac
 done

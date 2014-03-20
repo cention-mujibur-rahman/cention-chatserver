@@ -1,7 +1,7 @@
 #! /bin/bash
 
 httpRequest() {
-	./getUpdate.sh $TEST_HOST 2> /dev/null |
+	./agent_chat.sh getUpdate $TEST_HOST 2> /dev/null |
 	grep 'count'
 }
 
