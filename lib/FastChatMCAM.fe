@@ -1,12 +1,18 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
 
+global {
+	object currentUser;
+}
+
 namespace ChatMCAM {
+	array lastSent;
+
 	function _getAreaAgents( number area_id ) {
 		return Array.append( [ [ 'id' => 0, 'value' => I('Forward To Agent') ] ], (closure {
 			array list = [];
 			Workflow.User.listFromCache(area_id).each() using ( item ) {
-				if( item['id'] != Workflow.User.fetchUserObject().id ) {
+				if( item['id'] != currentUser.id ) {
 					object user = Workflow.User.load(item['id']);
 					if( user and user.acceptChat ) {
 						list[] = item;
@@ -74,11 +80,17 @@ namespace ChatMCAM {
 		array list = [];
 		array order = [];
 		
+		
+		
 		Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids).each() using ( session ) {
 			object lastMessageFromClient = Workflow.ChatMessage.lastMessageFromClient(session.id);
-			object lastMessage = Workflow.ChatMessage.lastMessage(session.id);
-			boolean wasLastMessageSentByClient = (lastMessage
-				? (lastMessage.client ? true : false)
+			// object lastMessage = Workflow.ChatMessage.lastMessage(session.id);
+			// boolean wasLastMessageSentByClient = (lastMessage
+			// 	? (lastMessage.client ? true : false)
+			// 	: true);
+			
+			boolean wasLastMessageSentByClient = (.lastSent[''+session.id]
+				? (lastMessageFromClient.timestampSent > .lastSent[''+session.id].timestampSent ? true : false)
 				: true);
 			
 			order[] = session.id;
@@ -99,8 +111,8 @@ namespace ChatMCAM {
 					'started' => session.timestampStarted
 				],
 				'style' => [
-					'bg' => (session.user and session.user.id == Workflow.User.fetchUserObject().id ? '#CFC' : '#FFF'),
-					'bold' => (session.user and session.user.id == Workflow.User.fetchUserObject().id and wasLastMessageSentByClient ? true : false)
+					'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
+					'bold' => (session.user and session.user.id == currentUser.id and wasLastMessageSentByClient ? true : false)
 				]
 			];
 		};
@@ -194,7 +206,7 @@ namespace ChatMCAM {
 		if( not ._attemptedActiveSessionsCache ) {
 			._activeSessionsCache = [];
 			Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), Workflow.Area.idListForUserFromCache(),
-				[ Workflow.User.fetchUserObject().id ]).each() using ( session )
+				[ currentUser.id ]).each() using ( session )
 			{
 				._activeSessionsCache[] = session.id;
 			};
@@ -205,7 +217,6 @@ namespace ChatMCAM {
 	function _getUnseenSessions() {
 		array sessionsWithUnseenMessages;
 		object sessionToShow;
-		object currentUser = Workflow.User.fetchUserObject();
 		sessionsWithUnseenMessages = Workflow.ChatSession.haveUnseenMessagesList(Workflow.SystemGroup.current(), currentUser.id);
 		if( sessionsWithUnseenMessages ) {
 			sessionToShow = sessionsWithUnseenMessages[0];
@@ -232,7 +243,6 @@ namespace ChatMCAM {
 	}
 
 	function getUpdate( array parameters ) {
-		object currentUser = Workflow.User.fetchUserObject();
 		number session_id = 0;
 		array area_ids = [];
 		array user_ids = [];
@@ -291,7 +301,8 @@ namespace ChatMCAM {
 			message.setValue('session', session.id);
 			message.setValue('timestampSent', now);
 			message.setValue('message', parameters['text']);
-			message.setValue('user', Workflow.User.fetchUserObject());
+			message.setValue('user', currentUser);
+			.lastSent[''+session.id] = message;
 			message.save();
 			if( now > session.timestampLastAgentMessageSent ) {
 				session.setValue('timestampLastAgentMessageSent', now);
@@ -454,10 +465,10 @@ namespace ChatMCAM {
 			? parameters['session'].toNumber()
 			: 0));
 		boolean acquired = false;
-		if( session and session.user and session.user.id == Workflow.User.fetchUserObject().id ) {
+		if( session and session.user and session.user.id == currentUser.id ) {
 			acquired = true;
 		} else if( session and session.user == null ) {
-			session.setValue('user', Workflow.User.fetchUserObject());
+			session.setValue('user', currentUser);
 			session.setValue('timestampAssigned', Date.GMTnow());
 			session.save();
 			acquired = true;
@@ -668,8 +679,9 @@ namespace InternalChat {
 	function handleChatRequest ( object req, array commands, array parameters ) {
 	
 		// Quick workaround to handle multiple requests.
-		// TODO: replace global request variable with request parameter.	
+		// TODO: replace global request variable with request parameter.
 		request = req;
+		currentUser = Workflow.User.fetchUserObject();
 		//monitor {
 		if( commands ) {
 			switch( commands[0] ) {
