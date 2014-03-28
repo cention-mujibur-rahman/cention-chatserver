@@ -25,7 +25,7 @@ object commandline = new ConsoleServer();
 commandline.prompt('chatserver> ');
 
 commandline.command('x','exit','quit') using (args) {
-	Sys.exit(0);
+	EventLoop.stop();
 };
 
 commandline.command('d','descriptors') using (args) {
