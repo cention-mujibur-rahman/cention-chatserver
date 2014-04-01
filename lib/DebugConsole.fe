@@ -25,6 +25,7 @@ object commandline = new ConsoleServer();
 commandline.prompt('chatserver> ');
 
 commandline.command('x','exit','quit') using (args) {
+	commandline.prompt('');
 	EventLoop.stop();
 };
 
