@@ -2,7 +2,7 @@
 
 CMD=''
 DATA=''
-HOST=localhost:9090
+HOST=localhost
 ENVELOPE=0
 COOKIES=(
 	'cention-suiteWFUserID=2;'
