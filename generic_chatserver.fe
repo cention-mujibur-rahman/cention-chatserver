@@ -1,0 +1,80 @@
+#! /usr/bin/env ferite
+
+uses 'libweb/httpserver', 'libweb/consoleserver';
+uses 'lib/FastChatMCAM';
+uses 'lib/ExternalChat';
+uses 'date';
+uses 'sys';
+
+
+global {
+	number objSrvLastConnectionTime;
+	number TIMEOUT;
+	array options;
+}
+
+class DummyApplication {
+	string realName;
+	boolean topLevel;
+}
+
+function checkRpcConnection () {
+	number now = Date.now();
+	
+	/* Make sure we have connection to objectserver before continuing */
+	if (now - objSrvLastConnectionTime > TIMEOUT) {
+		JSON.RPC.reconnect('localhost',8080);
+	}
+	objSrvLastConnectionTime = now;
+}
+
+options = [
+	'server' => 'InternalChat',
+	'port' => 9090,
+	'console' => false
+];
+
+while (argv.size()) {
+	string opt = argv.shift();
+	switch (opt) {
+		case '-server':
+			options.server = argv.shift();
+			break;
+		case '-port':
+			options.port = argv.shift().toNumber();
+			break;
+		case '-console':
+			options.console = true;
+			break;
+		default:
+			Console.printlnErr("Unknown argument: $opt");
+			Sys.exit(1);
+	}
+}
+
+objSrvLastConnectionTime = 0;
+TIMEOUT = 4.5 * 60;
+
+application = new DummyApplication();
+application.realName = 'cention-suite';
+
+if (options.server == 'InternalChat') {
+	object chatserver = new HttpServer(options.port);
+	chatserver.sync_post = true;
+	chatserver.onRequest() using (req) {
+		array commands = [ 'MCAM' , req.pathInfo() ];
+		checkRpcConnection();
+		req.respond(InternalChat.handleChatRequest(req,commands,req.query));
+	};
+}
+if (options.server == 'ExternalChat') {
+	object externalchat = new HttpServer(options.port);
+	externalchat.sync_post = true;
+	externalchat.onRequest() using (req) {
+		array commands = [ 'MCAM' , req.pathInfo() ];
+		checkRpcConnection();
+		req.respond(ExternalChat.handleChatRequest(req,commands,req.query));	
+	};
+}
+
+EventLoop.listen();
