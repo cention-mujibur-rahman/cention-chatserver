@@ -2,7 +2,7 @@ uses 'console';
 uses 'network';
 uses 'regexp';
 uses 'JSON';
-uses 'libweb/tcpclient';
+uses 'tcpclient';
 
 /**
  * @class AsyncJsonRPC
