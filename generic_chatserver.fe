@@ -1,7 +1,7 @@
 #! /usr/bin/env ferite
 
 uses 'httpserver', 'consoleserver';
-uses 'lib/FastChatMCAM';
+uses 'lib/InternalChat';
 uses 'lib/ExternalChat';
 uses 'date';
 uses 'sys';
