@@ -80,18 +80,16 @@ namespace ChatMCAM {
 		array list = [];
 		array order = [];
 		
-		
-		
 		Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids).each() using ( session ) {
 			object lastMessageFromClient = Workflow.ChatMessage.lastMessageFromClient(session.id);
-			// object lastMessage = Workflow.ChatMessage.lastMessage(session.id);
-			// boolean wasLastMessageSentByClient = (lastMessage
-			// 	? (lastMessage.client ? true : false)
-			// 	: true);
-			
-			boolean wasLastMessageSentByClient = (.lastSent[''+session.id]
-				? (lastMessageFromClient.timestampSent > .lastSent[''+session.id].timestampSent ? true : false)
+			object lastMessage = Workflow.ChatMessage.lastMessage(session.id);
+			boolean wasLastMessageSentByClient = (lastMessage
+				? (lastMessage.client ? true : false)
 				: true);
+			
+			// boolean wasLastMessageSentByClient = (.lastSent[''+session.id]
+			// 	? (lastMessageFromClient.timestampSent > .lastSent[''+session.id].timestampSent ? true : false)
+			// 	: true);
 			
 			order[] = session.id;
 			list["${session.id}"] = [
@@ -302,7 +300,7 @@ namespace ChatMCAM {
 			message.setValue('timestampSent', now);
 			message.setValue('message', parameters['text']);
 			message.setValue('user', currentUser);
-			.lastSent[''+session.id] = message;
+			// .lastSent[''+session.id] = message;
 			message.save();
 			if( now > session.timestampLastAgentMessageSent ) {
 				session.setValue('timestampLastAgentMessageSent', now);
