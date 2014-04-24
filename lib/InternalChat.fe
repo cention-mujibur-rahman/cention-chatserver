@@ -79,17 +79,36 @@ namespace ChatMCAM {
 	function _getList( array area_ids, array user_ids) {
 		array list = [];
 		array order = [];
+		array sessions = [];
+		array activeList = Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids);
+		array chats = [];
+		string sqlQuery = "select a.session,message,clientsentlast from (
+				select distinct on (session) session, client_fkey != 0 as clientsentlast
+					from workflow_chatmessages
+						where session in (%SESSIONS%)
+						order by session,timestampsent desc
+			) as a join (
+				select distinct on (session) session, message
+					from workflow_chatmessages
+						where session in (%SESSIONS%)
+						and client_fkey != 0
+						order by session,timestampsent desc
+			) as b on a.session = b.session;";
 		
-		Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids).each() using ( session ) {
-			object lastMessageFromClient = Workflow.ChatMessage.lastMessageFromClient(session.id);
-			object lastMessage = Workflow.ChatMessage.lastMessage(session.id);
-			boolean wasLastMessageSentByClient = (lastMessage
-				? (lastMessage.client ? true : false)
-				: true);
-			
-			// boolean wasLastMessageSentByClient = (.lastSent[''+session.id]
-			// 	? (lastMessageFromClient.timestampSent > .lastSent[''+session.id].timestampSent ? true : false)
-			// 	: true);
+		activeList.each() using ( session ) {
+			sessions.push(session.id);
+		};
+		
+		ObjRunObject.rawQuery(sqlQuery.replace('%SESSIONS%',sessions.join(','))).each() using ( chat ) {
+			chats["${chat.session}"] = [
+				'session' => chat.session,
+				'message' => chat.message,
+				'clientSentLast' => chat.clientsentlast
+			];
+		};
+		
+		activeList.each() using ( session ) {
+			array chat = chats["${session.id}"];
 			
 			order[] = session.id;
 			list["${session.id}"] = [
@@ -98,8 +117,8 @@ namespace ChatMCAM {
 					'id' => session.id,
 					'areaID' => session.area.id,
 					'area' => session.area.name,
-					'message' => (lastMessageFromClient and lastMessageFromClient.message
-						? (lastMessageFromClient.message.utf8Length() > 125 ? lastMessageFromClient.message.utf8Slice(125) + '...' : lastMessageFromClient.message)
+					'message' => (chat and chat.message
+						? (chat.message.utf8Length() > 125 ? chat.message.utf8Slice(125) + '...' : chat.message)
 						: I('No Message')),
 					'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
 					'email' => (session.client and session.client.email ? session.client.email.emailAddress : I('No Sender')),
@@ -110,7 +129,7 @@ namespace ChatMCAM {
 				],
 				'style' => [
 					'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
-					'bold' => (session.user and session.user.id == currentUser.id and wasLastMessageSentByClient ? true : false)
+					'bold' => (session.user and session.user.id == currentUser.id and chat.clientSentLast ? true : false)
 				]
 			];
 		};
