@@ -95,44 +95,46 @@ namespace ChatMCAM {
 						order by session,timestampsent desc
 			) as b on a.session = b.session;";
 		
-		activeList.each() using ( session ) {
-			sessions.push(session.id);
-		};
-		
-		ObjRunObject.rawQuery(sqlQuery.replace('%SESSIONS%',sessions.join(','))).each() using ( chat ) {
-			chats["${chat.session}"] = [
-				'session' => chat.session,
-				'message' => chat.message,
-				'clientSentLast' => chat.clientsentlast
-			];
-		};
-		
-		activeList.each() using ( session ) {
-			array chat = chats["${session.id}"];
+		if (activeList.size() > 0) {
+			activeList.each() using ( session ) {
+				sessions.push(session.id);
+			};
 			
-			order[] = session.id;
-			list["${session.id}"] = [
-				'id' => session.id,
-				'data' => [
+			ObjRunObject.rawQuery(sqlQuery.replace('%SESSIONS%',sessions.join(','))).each() using ( chat ) {
+				chats["${chat.session}"] = [
+					'session' => chat.session,
+					'message' => chat.message,
+					'clientSentLast' => chat.clientsentlast
+				];
+			};
+			
+			activeList.each() using ( session ) {
+				array chat = chats["${session.id}"];
+				
+				order[] = session.id;
+				list["${session.id}"] = [
 					'id' => session.id,
-					'areaID' => session.area.id,
-					'area' => session.area.name,
-					'message' => (chat and chat.message
-						? (chat.message.utf8Length() > 125 ? chat.message.utf8Slice(125) + '...' : chat.message)
-						: I('No Message')),
-					'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
-					'email' => (session.client and session.client.email ? session.client.email.emailAddress : I('No Sender')),
-					'assigned' => (session.user ? 1 : 0),
-					'owner' => (session.user ? session.user.username : I('Unassigned')),
-					'startedHuman' => formatDateTime(session.timestampStarted),
-					'started' => session.timestampStarted
-				],
-				'style' => [
-					'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
-					'bold' => (session.user and session.user.id == currentUser.id and chat.clientSentLast ? true : false)
-				]
-			];
-		};
+					'data' => [
+						'id' => session.id,
+						'areaID' => session.area.id,
+						'area' => session.area.name,
+						'message' => (chat and chat.message
+							? (chat.message.utf8Length() > 125 ? chat.message.utf8Slice(125) + '...' : chat.message)
+							: I('No Message')),
+						'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
+						'email' => (session.client and session.client.email ? session.client.email.emailAddress : I('No Sender')),
+						'assigned' => (session.user ? 1 : 0),
+						'owner' => (session.user ? session.user.username : I('Unassigned')),
+						'startedHuman' => formatDateTime(session.timestampStarted),
+						'started' => session.timestampStarted
+					],
+					'style' => [
+						'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
+						'bold' => (session.user and session.user.id == currentUser.id and chat.clientSentLast ? true : false)
+					]
+				];
+			};
+		}
 		
 		return [
 			'list' => list,
