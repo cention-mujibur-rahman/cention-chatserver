@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<yard name="cention-chatserver">
+
+	<property id="name" value="cention-chatserver" />
+	<property id="version" value="1.0" />
+	
+	<collection id="chatserver">
+		<list type="module">
+			<file name="cention-chatserver.sh" />
+			<file name="generic_chatserver.fe" />
+			<fileset dir="lib" match="\.fe$" />
+		</list>
+	</collection>
+	
+	<phase id="install">
+		<copy source="chatserver.module" target="/cention/chatserver" maintainpath="true" />
+	</phase>
+</yard>
