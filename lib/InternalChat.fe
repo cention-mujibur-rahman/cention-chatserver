@@ -130,7 +130,7 @@ namespace ChatMCAM {
 					],
 					'style' => [
 						'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
-						'bold' => (session.user and session.user.id == currentUser.id and chat.clientSentLast ? true : false)
+						'bold' => (chat.clientSentLast == 't' ? true : false)
 					]
 				];
 			};
