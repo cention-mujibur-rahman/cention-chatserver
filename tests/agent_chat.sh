@@ -4,6 +4,7 @@ CMD=''
 DATA=''
 HOST=localhost
 ENVELOPE=0
+SESSION=20
 COOKIES=(
 	'cention-suiteWFUserID=2;'
 	'cention-suiteWFPassword=kW83un60RZvFwuehOluJiCws7VU9yOKcdTsSt060ZBI=;'
@@ -30,6 +31,10 @@ while [ $# -gt 0 ];do
 			;;
 		-data)
 			DATA="$1"
+			shift
+			;;
+		-session)
+			SESSION="$1"
 			shift
 			;;
 		*)
@@ -72,19 +77,19 @@ chat_protocol () {
 			;;
 		acquireSession)
 			mcam acquireSession \
-				`default "$DATA" 'session=20'`
+				`default "$DATA" 'session='$SESSION`
 			;;
 		markAsSeen)
 			mcam markAsSeen \
-				`default "$DATA" 'sessions=20'`
+				`default "$DATA" 'sessions='$SESSION`
 			;;
 		sendMessage)
 			mcam sendMessage \
-				`default "$DATA" 'session=20&text=hello'`
+				`default "$DATA" 'session='$SESSION'&text=hello'`
 			;;
 		finishChatSessionTag)
 			mcam finishChatSessionTag \
-				`default "$DATA" 'value=20&withTag=notag&tagid=-1&id=0'`
+				`default "$DATA" 'value='$SESSION'&withTag=notag&tagid=-1&id=0'`
 			;;
 	esac
 }
