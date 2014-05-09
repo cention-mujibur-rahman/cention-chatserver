@@ -554,10 +554,10 @@ namespace ChatMCAM {
 					return false;
 				}).invoke(),
 			'feature' => (closure{
-					if( F('chat.optional-tag') ) {
+					if( F('chat.forced-tag') ) {
 							return 1;
 					} else {
-						if( F('chat.forced-tag') )
+						if( F('chat.optional-tag') )
 							return -1;
 						return 0;
 					}
@@ -632,14 +632,13 @@ namespace ChatMCAM {
 		string tagdisplay;
 		number id = param['id'].toNumber();
 		number session_id = param['session_id'].toNumber();	
-			tagdisplay += "<div id='tag_list_display'>";
+			tagdisplay += "<div id='tag_list_display'><div style='height: 299.6px; overflow-y: scroll;'>";
 			Workflow.Area.tagsFromCache(id).each() using ( tag_cache ) {
 				number tagid = tag_cache['id'];
 				string tagval = tag_cache['display'];
-				tagdisplay += "<div><input type='checkbox' name='tagcheck' id='tagcheckid${tagid}' value='${tagval}' onclick='checkOneTag(${session_id},${tagid},1)'/> ${tagval}</div>";
+				tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagchecks' id='tagcheckids${tagid}' value='${tagval}' onclick='checkOneTag(${session_id},${tagid},1)'/> ${tagval}</li>";
 			};
-			tagdisplay += "</div>";
-		
+			tagdisplay += "</div></div>";
 		return tagdisplay;
 	}
 	
@@ -648,22 +647,13 @@ namespace ChatMCAM {
 			number areaid = parameters['areaid'].toNumber();
 			number session_id = parameters['session'].toNumber();	
 			string tagdisplay;
-			string tagdisplayContent = I('Are you sure you want to finish the chat without choosing a tag?');
-			string yesButton = I('Yes');
-			string noButton = I('No');
-			if( F('chat.forced-tag') ) {
-				tagdisplay += "<div id='tag_list_display'>";
-			} else {
-				tagdisplay = "<div id='confirm_finish' style='display: block; padding-top: 50px; padding-left: 50px;'>"+ tagdisplayContent +"</div>";
-				tagdisplay += "<div id='confirm_finish_yesno' style='display: block; padding-left: 170px; padding-top: 10px; padding-bottom: 50px;'> <input type='button' onclick='finishNoTag(${session_id});' name='confirm_tag' id='confirm_tag' value = '"+ yesButton +"' /> <input type='button' onclick='displayTag();' name='confirm_notag' name='confirm_notag' value = '"+ noButton +"' /></div>";	
-				tagdisplay += "<div style='display: none' id='tag_list_display'>";
-			}
-				Workflow.Area.tagsFromCache(areaid).each() using ( tag_cache ) {
-					number tagid = tag_cache['id'];
-					string tagval = tag_cache['display'];
-					tagdisplay += "<div><input type='checkbox' name='tagcheck' id='tagcheckid${tagid}' value='${tagval}' /> ${tagval} </div>";
-				};
-				tagdisplay += "<div style='display: block; padding-left: 170px; padding-top: 10px; padding-bottom: 10px;'><input type='button' value='Finish' onclick='checkedTags(${session_id},0)'> <input type='button' value='Cancel' onclick=AnswerPageBoxClose('GlobalChat_TagsBoxFinish')></div></div>";
+			tagdisplay += "<div id='tag_list_display'><div style='padding:5px'><h3 style='margin:0;padding:0'>"+I('You have not chosen a classification for this errand.')+"</h3></div><div style='padding:5px'>"+I('You can navigate the list by pressing the up and down arrows and select a classification by pressing space.')+"</div><div style='padding:5px'>"+I('Press Escape to Cancel')+"</div><div style='height: 299.6px; overflow-y: scroll;'>";
+			Workflow.Area.tagsFromCache(areaid).each() using ( tag_cache ) {
+				number tagid = tag_cache['id'];
+				string tagval = tag_cache['display'];
+				tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagcheck' id='tagcheckid${tagid}' value='${tagval}' /> ${tagval}</li>";
+			};
+			tagdisplay += "</div></div>";
 			return tagdisplay;
 	}
 	
@@ -678,9 +668,11 @@ namespace ChatMCAM {
 			if(tagname == 'withtag') {
 			object tag = Workflow.Tag.load( tagid );
 				if(id == 0)
-					session.close(false, tag);
+					session.close(false, tag, false);
+				else
+					session.close(false, tag, true);
 			}else{
-				session.close(false, null);
+				session.close(false, null, false);
 			}
 			if( ExternalQueueInterface.enabled() and session.queuedInExternal ) {
 				ExternalQueueInterface.removeChat(session);
@@ -690,6 +682,15 @@ namespace ChatMCAM {
 		{
 			return JSON.valueToJSON(false);
 		}
+	}
+	
+	function checkFeature() {
+		if( F('chat.forced-tag'))
+			return 'forcedtag';
+		else if ( F('chat.optional-tag'))
+			return 'optionaltag';
+		else
+			return 'none';			
 	}
 	
 }
@@ -769,6 +770,10 @@ namespace InternalChat {
 						case 'StandaloneChat.finishChatSessionTag':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishChatSessionTag(parameters));
 							break;
+					case 'GlobalChat.checkFeature':
+					case 'StandaloneChat.checkFeature':
+						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.checkFeature());
+						break;
 					}
 					
 					return HTML.MCAMEnvelope(channels.join(','));
@@ -790,4 +795,7 @@ namespace InternalChat {
 		}*/
 	}
 }
+
+Cache.page = new CentionMainPage();
+Cache.page.setupFeatureSystem();
 
