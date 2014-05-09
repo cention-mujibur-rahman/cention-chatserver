@@ -1,4 +1,4 @@
-uses 'ChatConfig.feh';
+uses '/cention/webroot/External.app/ChatConfig.feh';
 uses 'cmail';
 uses 'MailUtilities';
 uses 'objrunsrv-workflow';
