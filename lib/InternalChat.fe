@@ -7,6 +7,10 @@ global {
 
 namespace ChatMCAM {
 	array lastSent;
+	
+	function setupFeatureSystem {
+		Workflow.FeatureSystem.setup();
+	}
 
 	function _getAreaAgents( number area_id ) {
 		return Array.append( [ [ 'id' => 0, 'value' => I('Forward To Agent') ] ], (closure {
@@ -702,6 +706,8 @@ namespace InternalChat {
 		// TODO: replace global request variable with request parameter.
 		request = req;
 		currentUser = Workflow.User.fetchUserObject();
+		
+		ChatMCAM.setupFeatureSystem();
 		//monitor {
 		if( commands ) {
 			switch( commands[0] ) {
@@ -795,7 +801,3 @@ namespace InternalChat {
 		}*/
 	}
 }
-
-Cache.page = new CentionMainPage();
-Cache.page.setupFeatureSystem();
-
