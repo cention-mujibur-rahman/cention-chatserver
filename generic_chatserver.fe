@@ -64,6 +64,7 @@ if (options.server == 'InternalChat') {
 	chatserver.onRequest() using (req) {
 		array commands = [ 'MCAM' , req.pathInfo() ];
 		checkRpcConnection();
+		req.noCache();
 		req.respond(InternalChat.handleChatRequest(req,commands,req.query));
 	};
 }
@@ -73,6 +74,7 @@ if (options.server == 'ExternalChat') {
 	externalchat.onRequest() using (req) {
 		array commands = [ 'MCAM' , req.pathInfo() ];
 		checkRpcConnection();
+		req.noCache();
 		req.respond(ExternalChat.handleChatRequest(req,commands,req.query));	
 	};
 }
