@@ -16,11 +16,11 @@ port () {
 
 startservers () {
 	for x in `balancers internal`;do
-		ferite generic_chatserver.fe -- -port `port $x` -server InternalChat &
+		LD_LIBRARY_PATH=/cention/lib ferite generic_chatserver.fe -- -port `port $x` -server InternalChat &
 	done
 	
 	for x in `balancers external`;do
-		ferite generic_chatserver.fe -- -port `port $x` -server ExternalChat &
+		LD_LIBRARY_PATH=/cention/lib ferite generic_chatserver.fe -- -port `port $x` -server ExternalChat &
 	done
 }
 
