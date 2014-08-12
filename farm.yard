@@ -14,6 +14,6 @@
 	
 	<phase id="install">
 		<copy source="chatserver.module" target="/cention/chatserver" maintainpath="true" />
-		<execute program="chmod" arguments="+x /cention/chatserver/cention-chatserver.sh" />
+		<execute program="chmod" arguments="+x $(destination)/cention/chatserver/cention-chatserver.sh" />
 	</phase>
 </yard>
