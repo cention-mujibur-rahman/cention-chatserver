@@ -28,32 +28,43 @@ namespace ChatMCAM {
 	}
 	function _getAlternativeAnswers( number area_id ) {
 			array list = [];
+			array data = [];
 			array results = [];
+			array result = [];
+			string body = '';
 			
-			string sqlQuery = "SELECT workflow_errand_id AS id, sa.subject AS subject, sa.body AS body, sa.htmlBody AS html_body 
-					   FROM workflow_errands AS e LEFT JOIN workflow_simplemessages AS se ON e.message_fkey=se.workflow_simplemessage_id 
-					   LEFT JOIN workflow_answers AS a ON e.answer_fkey=a.workflow_answer_id 
-					   LEFT JOIN workflow_simplemessages AS sa ON a.message_fkey=sa.workflow_simplemessage_id WHERE e._deleted=false AND workflow_errand_id 
-					   IN (SELECT parent_workflow_errand_id FROM workflow_errand_tags_links 
-					   WHERE child_workflow_tag_id=7) AND targetarea_fkey = ${area_id} ORDER BY subject DESC";
-			
-			results = ObjRunObject.rawQuery(sqlQuery);
-			
-			if( results ){
-				list [] = [ 'id' => 0, 'value' => I('Choose Alternative answer') ];
-			} else {
-				
-				list [] = [ 'id' => 0, 'value' => I('No Alternative Answers') ];
+			object area = Workflow.Area.load( area_id );
+			if( area ) {
+				object searchRules = area.getExternalSearchRules();
+				if( searchRules and searchRules.enabled and ExternalSearchInterface.isEnabled() ) {
+					results = ExternalSearchInterface.templates(searchRules, true);
+				} else {
+					results = Workflow.Search.run("custom:answer locations:${area.id} type:contents-keyword source:either state:any published:yes exact:no time:both sort-asc:subject limit:1000 offset:0");
+				}
 			}
-			
+			result['order'] = [];
+			result['list'] = [];
 			results.each() using ( row ) {
-				list [] = [
-					'id' => row['id'],
-					'value' => row['subject']
-				];
+				if( row['body'] ){
+
+					if( row['body'].utf8Length() > 50)
+						body = row['body'].utf8Slice(50) + '...';
+					else
+						body = row['body'];
+
+					result['order'][] = row['id'];
+					result['list']['' + row['id']] = [
+						'id' => row['id'],
+						'data' => [ 
+							'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
+							'subject' => row['subject'],
+							'body' => body,
+							'trimBody' => row['body']
+						]
+					];
+				}
 			};
-			
-			return list;
+			return [ 'list' => result, 'data' => data ];
 	}
 	function _messageToArray( object message ) {
 		return [
@@ -113,13 +124,14 @@ namespace ChatMCAM {
 			};
 			
 			activeList.each() using ( session ) {
-				array chat = chats["${session.id}"];
+				array chat = (chats.keyExists("${session.id}") ? chats["${session.id}"] : []);
 				
-				order[] = session.id;
+				order[] = session.errand.id;
 				list["${session.id}"] = [
-					'id' => session.id,
+					'id' => session.errand.id,
+					'chatSessionID' => session.id,
 					'data' => [
-						'id' => session.id,
+						'id' => session.errand.id,
 						'areaID' => session.area.id,
 						'area' => session.area.name,
 						'message' => (chat and chat.message
@@ -134,12 +146,12 @@ namespace ChatMCAM {
 					],
 					'style' => [
 						'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
-						'bold' => (chat.clientSentLast == 't' ? true : false)
+						'bold' => (chat and chat.clientSentLast == 't' ? true : false)
 					]
 				];
 			};
 		}
-		
+	
 		return [
 			'list' => list,
 			'order' => order
@@ -251,13 +263,39 @@ namespace ChatMCAM {
 			return [
 				'list' => sessionsWithUnseenMessages.process() using( session ) { return session.id; },
 				'session' => [
-					'id' => sessionToShow.id,
+					'id' => (sessionToShow.errand and sessionToShow.errand.id ? sessionToShow.errand.id : 0 ),
+					'chatSessionID' => sessionToShow.id, 
 					'client' => (sessionToShow.client and sessionToShow.client.name ? sessionToShow.client.name : I('No Name')),
 					'messages' => ._getAllMessages(sessionToShow),
 					'externalData' => sessionToShow.externalData,
 					'area' => [
 						'id' => (sessionToShow.area ? sessionToShow.area.id : 0),
-						'agents' => (sessionToShow.area ? ._getAreaAgents(sessionToShow.area.id) : [])
+						'answers' => (closure {
+							if( F('alternative-answers.show-everything')) {
+								return ._getAlternativeAnswers( sessionToShow.area.id );
+							}
+							return [];
+						}).invoke(),
+						'externalSystemURL' => (closure {
+							// The area object in Workflow.ChatSession is of view Tiny.
+							// This means that it does not contain the variables that are needed here.
+							// That is why the full area object is loaded.
+							object area = Workflow.Area.load(sessionToShow.area.id);
+							if( area.openExternalSystemRules ) {
+								return area.openExternalSystemRules.url;
+							} else {
+								object organisation = Workflow.Organisation.byAreaID(sessionToShow.area.id);
+								// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
+								// More data is needed so full object is loaded.
+								organisation = Workflow.Organisation.load(organisation.id);
+								if( organisation.openExternalSystemRules )
+									return organisation.openExternalSystemRules.url;
+							}
+							return '';
+						}).invoke()
+					],
+					'user' => [
+						'openExternalSystem' => currentUser.openExternalSystem
 					]
 				]
 			];
@@ -269,6 +307,9 @@ namespace ChatMCAM {
 		number session_id = 0;
 		array area_ids = [];
 		array user_ids = [];
+		number current_time = Date.GMTnow();
+		number blockchat_minutes = (F('chat.blacklist.time') ? F('chat.blacklist.time') : 0);
+		number blockchat_seconds = blockchat_minutes * 60;
 		
 		if( currentUser.acceptChat ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentUser.username} [${currentUser.id}] - time since last update: " + (closure {
@@ -276,48 +317,59 @@ namespace ChatMCAM {
 			}).invoke() + " (${Date.GMTnow()})");
 		}
 		currentUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		// currentUser.save();
-		{
-			object jsonRPC = new AsyncJsonRPC('localhost',8080,'/objsrv');
-			jsonRPC.invoke( 'Workflow.User.save' , [ 'target' => currentUser ]) using (res) {/* do nothing */};
+		currentUser.delayedSave();
+		area_ids = Workflow.Area.idListForUserFromCache();
+		
+		if(blockchat_minutes != 0) 	{
+				area_ids.each() using ( areaids ) {
+					Workflow.BlockedIPAddress.getIpAddressBlacklist( areaids ).each() using ( iplist ) {
+							object iplAdddress = Workflow.BlockedIPAddress.load(iplist.id);
+							if(current_time - iplAdddress.timestampWhen > blockchat_seconds)	{
+								iplAdddress.setValue('active', false);
+								iplAdddress.save();
+							}								
+					};
+				};
 		}
 		
-		if( parameters.keyExists('areas') ) {
-			parameters['areas'].toArray(',').each() using ( id ) {
-				area_ids[] = id.toNumber();
-			};
-		}
-		if( parameters.keyExists('users') ) {
-			parameters['users'].toArray(',').each() using ( id ) {
-				user_ids[] = id.toNumber();
-			};
-		}
 		if( parameters.keyExists('session') ) {
 			session_id = parameters['session'].toNumber();
 		}
 		
 		return JSON.valueToJSON([
-			'list' => ._getList(area_ids, user_ids),
+			'list' => ._getList(area_ids, [currentUser.id]),
 			'current' => (closure {
 				object session = Workflow.ChatSession.load(session_id);
 				if( session ) {
 					return [
 						'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
+						'clientEmail' => (session.client and session.client.email ? session.client.email.emailAddress : ''),
 						'preview' => session.nextClientMessagePreview,
+						'showMessagePreview' => ( session.user && session.user.chatMessagePreview ? session.user.chatMessagePreview : 0 ),
 						'messages' => ._getMessages(session.id, (parameters.keyExists('timestampLastMessage')
 							? parameters['timestampLastMessage'].toNumber()
-							: 0))
+							: 0)),
+						'tag' => (Workflow.Area.tagsFromCache( session.area.id ) ? true : false)					
 					];
 				}
 				return null;
 			}).invoke(),
+			'feature' => (closure{
+					if( F('chat.forced-tag') ) {
+							return 1;
+					} else {
+						if( F('chat.optional-tag') )
+							return -1;
+						return 0;
+					}
+				}).invoke(),
 			'unseen' => ._getUnseenSessions(),
 			'count' => ._getActiveSessionsForCurrentUser().size()
 		]);
 	}
 	
 	function sendMessage( array parameters ) {
-		object session = Workflow.ChatSession.load(parameters['session'].toNumber());
+		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		if( session ) {
 			number now = Date.GMTnow();
 			object message = new Workflow.ChatMessage();
@@ -325,7 +377,6 @@ namespace ChatMCAM {
 			message.setValue('timestampSent', now);
 			message.setValue('message', parameters['text']);
 			message.setValue('user', currentUser);
-			// .lastSent[''+session.id] = message;
 			message.save();
 			if( now > session.timestampLastAgentMessageSent ) {
 				session.setValue('timestampLastAgentMessageSent', now);
@@ -337,11 +388,9 @@ namespace ChatMCAM {
 	}
 	
 	function getAgents( array parameters ) {
-		object session = Workflow.ChatSession.load((parameters.keyExists('session')
-			? parameters['session'].toNumber()
-			: 0));
+		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		if( session ) {
-			object area = Workflow.Area.load(session.area.id); // Tiny to full
+			object area = Workflow.Area.load( session.area.id ); // Tiny to full
 			if( ExternalQueueInterface.enabled() and (area.externalID or area.solidusServiceGroupID) ) {
 				array list = ExternalQueueInterface.getChatAgents(area);
 				list.unshift([ 'id' => 0, 'value' => I('Forward to Agent') ]);
@@ -356,9 +405,7 @@ namespace ChatMCAM {
 
 	function forwardToAgent( array parameters ) {
 		number now = Date.GMTnow();
-		object session = Workflow.ChatSession.load((parameters.keyExists('session')
-			? parameters['session'].toNumber()
-			: 0));
+		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		object user = Workflow.User.load((parameters.keyExists('forward')
 			? parameters['forward'].toNumber()
 			: 0));
@@ -406,7 +453,7 @@ namespace ChatMCAM {
 		    agentsAvailable = SOAP.RPC.invoke('agentsAvailable', ['area_id' => parameters.forward_area_id], 'number');
 		    if( agentsAvailable ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Agents available in area [${parameters.forward_area_id}] and total agents are [${agentsAvailable}]");
-			list = Workflow.User.availableForChatList( [ parameters.forward_area_id ] );	
+			list = Workflow.User.availableForChatList( [ parameters.forward_area_id.toNumber() ] );
 			if( list ) {
 			    array possibleOwners = [];
 			    number lowestAmountOfAssignedChats = list[0]['count'];
@@ -427,9 +474,7 @@ namespace ChatMCAM {
 			    create = true;
 			}
 			if(create){
-			    session = Workflow.ChatSession.load((parameters.keyExists('session')
-			    ? parameters['session'].toNumber()
-			    : 0));
+				session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 			    fromUser = Workflow.User.load( (session.user.id ? session.user.id : 0) );
 			    fromArea = Workflow.Area.load( (session.area.id ? session.area.id : 0) );
 			    if( session and owner ) {
@@ -452,42 +497,28 @@ namespace ChatMCAM {
 		return JSON.valueToJSON(false);
 	}
 	
-	function getAlternativeAnswers( array parameters ) {
-		array results;
-		string body;
-		number errandId = ( parameters.keyExists('errandId')
-			? parameters['errandId'].toNumber()
-			: 0);
-	        string sqlQuery = "SELECT workflow_errand_id AS id, sa.subject AS subject, sa.body AS body, sa.htmlBody AS html_body 
-				  FROM workflow_errands AS e LEFT JOIN workflow_simplemessages AS se ON e.message_fkey=se.workflow_simplemessage_id 
-				  LEFT JOIN workflow_answers AS a ON e.answer_fkey=a.workflow_answer_id 
-				  LEFT JOIN workflow_simplemessages AS sa ON a.message_fkey=sa.workflow_simplemessage_id WHERE e._deleted=false AND workflow_errand_id = ${errandId} limit 1";
-		
-		results = ObjRunObject.rawQuery(sqlQuery);
-		if( results ) {
-			body = (results[0]['body'] ? results[0]['body'] : ( results[0]['html_body'] ? results[0]['html_body'] : I('No Answer Found')));	
-		}
-		return JSON.valueToJSON([ body ]);
-	}
-	
 	function finishSession( array parameters ) {
-		object session = Workflow.ChatSession.load((parameters.keyExists('session')
-			? parameters['session'].toNumber()
-			: 0));
+		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		if( session ) {
-			session.close(false, null);
+			session.close(false, false);
 			ChatQueueInterface.endChat(session);
+			Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
 			return JSON.valueToJSON(true);
 		}
+		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${session.id}], failure!");
 		return JSON.valueToJSON(false);
 	}
 	
 	function acquireSession( array parameters ) {
-		array openExternalSystem;
-		object session = Workflow.ChatSession.load((parameters.keyExists('session')
-			? parameters['session'].toNumber()
-			: 0));
+		number errandId = (parameters.keyExists('session') ? parameters['session'].toNumber() : 0);
+		object chatSession = Workflow.ChatSession.chatSessionByErrandID( errandId );
+		object session = Workflow.ChatSession.load( chatSession.id );
 		boolean acquired = false;
+		object organisation = Workflow.Organisation.byAreaID( session.area.id );
+		
+		// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
+		// More data is needed so full object is loaded.
+		organisation = Workflow.Organisation.load( organisation.id );
 		if( session and session.user and session.user.id == currentUser.id ) {
 			acquired = true;
 		} else if( session and session.user == null ) {
@@ -497,38 +528,11 @@ namespace ChatMCAM {
 			acquired = true;
 		}
 
-		if( F('open-external-system') and session ){
-				array area = Workflow.Area.fromCache( (session.area.id ? session.area.id : 0) );
-				if( area.openExternalSettings ){
-					object openExternal = Workflow.OpenExternalSettings.tiny( area.openExternalSettings.id );
-					if(openExternal.url != ''){
-						openExternalSystem['xwindow'] = openExternal.xwindow;
-						openExternalSystem['ywindow'] = openExternal.ywindow;
-						openExternalSystem['url'] = openExternal.url;
-					}
-				}
-				
-				if( !openExternalSystem.keyExists('url') ){
-					array organization = Workflow.Organisation.fromCache( (area.organisationID ? area.organisationID : 0) );
-					if(organization.openExternalSettings){
-						object openExternal = Workflow.OpenExternalSettings.tiny( organization.openExternalSettings.id );
-						if(openExternal.url != ''){
-							openExternalSystem['xwindow'] = openExternal.xwindow;
-							openExternalSystem['ywindow'] = openExternal.ywindow;
-							openExternalSystem['url'] = openExternal.url;
-						}	
-					}					
-				}
-				
-				if( openExternalSystem.keyExists('url') and session.user ){
-					object user = Workflow.User.load( session.user.id );
-					openExternalSystem['showOption'] = ( user.openExternalOption != '' ? user.openExternalOption : '');
-				}
-		}
-
 		return JSON.valueToJSON([
 			'acquired' => acquired,
+			'chatSessionID' => session.id,
 			'externalData' => session.externalData,
+			'startedHuman' => formatDateTime(session.timestampStarted),
 			'messages' => (closure {
 				if( acquired) {
 					return ._getAllMessages(session);
@@ -537,20 +541,34 @@ namespace ChatMCAM {
 			}).invoke(),
 			'area' => [
 				'id' => (session and session.area ? session.area.id : 0),
-				'agents' => (closure {
-					if( acquired ) {
-						return ._getAreaAgents(session.area.id);
+				'name' => (session and session.area ? session.area.name : ''),
+				'organisation' => ( organisation ? organisation.name : ''),
+				'answers' => (closure {
+					if( acquired && F('alternative-answers.show-everything')) {
+						return ._getAlternativeAnswers( session.area.id );
 					}
 					return [];
 				}).invoke(),
-				'alternativeAnswer' => (closure {
-					if( acquired && F('alternative-answers.show-everything')) {
-						return ._getAlternativeAnswers(session.area.id);
+				'externalSystemURL' => (closure {
+					if( acquired ) {
+						// The area object in Workflow.ChatSession is of view Tiny.
+						// This means that it does not contain the variables that are needed here.
+						// That is why the full area object is loaded.
+						object area = Workflow.Area.load(session.area.id);
+						if( area.openExternalSystemRules ) {
+							return area.openExternalSystemRules.url;
+						} else {
+							if( organisation.openExternalSystemRules )
+								return organisation.openExternalSystemRules.url;
+						}
 					}
-					return [];
+					return '';
 				}).invoke()
 			],
-			'OpenExternal' => openExternalSystem,
+			'user' => [
+				'openExternalSystem' => currentUser.openExternalSystem
+			],
+			'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
 			'clientEmail' => (session.client and session.client.email ? session.client.email.emailAddress : ''),
 			'tag' => (closure{
 					if( Workflow.Area.tagsFromCache( session.area.id ))
@@ -565,13 +583,11 @@ namespace ChatMCAM {
 							return -1;
 						return 0;
 					}
-				}).invoke()
+				}).invoke(),
+			'errand_notes' => ._getErrandNotes( errandId ),
+			'client_notes' => ._getClientNotes( errandId ),
+			'ipaddress' =>  session.ipAddress
 		]);
-	}
-	
-	function getOpenExternalPopupOption(array parameters){
-
-		return JSON.valueToJSON( true );
 	}
 
 	function markAsSeen( array parameters ) {
@@ -598,7 +614,6 @@ namespace ChatMCAM {
 		boolean answered = (parameters.keyExists('answered') ? (parameters['answered'].toNumber() ? true : false) : true);
 		boolean unanswered = (parameters.keyExists('unanswered') ? (parameters['unanswered'].toNumber() ? true : false) : true);
 		string address = parameters['address'];
-		
 		if( address ) {
 			Workflow.Errand.OtherContactsComponent = componentName;
 			Workflow.Errand.OtherContactsTab = 'chat-contacts-tab';
@@ -635,57 +650,86 @@ namespace ChatMCAM {
 	function fetchTagList( array param ) {
 		string tagdisplay;
 		number id = param['id'].toNumber();
-		number session_id = param['session_id'].toNumber();	
-			tagdisplay += "<div id='tag_list_display'><div style='height: 299.6px; overflow-y: scroll;'>";
-			Workflow.Area.tagsFromCache(id).each() using ( tag_cache ) {
+		number session_id = param['session_id'].toNumber();
+			tagdisplay += "<div id='tag_list_display'><div style='height: 200px; overflow: auto;'><ul>";
+			Workflow.Area.tagsFromCache( id ).each() using ( tag_cache ) {
 				number tagid = tag_cache['id'];
 				string tagval = tag_cache['display'];
-				tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagchecks' id='tagcheckids${tagid}' value='${tagval}' onclick='checkOneTag(${session_id},${tagid},1)'/> ${tagval}</li>";
+				if( not tag_cache['forDelete']  ){
+				tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagchecks' id='tagcheckids${tagid}' value='${tagval}' onclick='checkOneTag(${session_id},${tagid},1)'/><label> ${tagval}</label></li>";
+				}
 			};
-			tagdisplay += "</div></div>";
+			tagdisplay += "</ul></div></div>";
 		return tagdisplay;
 	}
-	
-	
 	function displayTagList( array parameters ) {
 			number areaid = parameters['areaid'].toNumber();
 			number session_id = parameters['session'].toNumber();	
 			string tagdisplay;
-			tagdisplay += "<div id='tag_list_display'><div style='padding:5px'><h3 style='margin:0;padding:0'>"+I('You have not chosen a classification for this errand.')+"</h3></div><div style='padding:5px'>"+I('You can navigate the list by pressing the up and down arrows and select a classification by pressing space.')+"</div><div style='padding:5px'>"+I('Press Escape to Cancel')+"</div><div style='height: 299.6px; overflow-y: scroll;'>";
+			tagdisplay += "<div id='tag_list_display'><div style='padding:5px'><h3 style='margin:0;padding:0'>"+I('You have not chosen a classification for this errand.')+"</h3></div><div style='padding:5px'>"+I('You can navigate the list by pressing the up and down arrows and select a classification by pressing space.')+"</div><div style='padding:5px'>"+I('Press Escape to Cancel')+"</div><div style='height: 200px; overflow: auto;'><ul>";
 			Workflow.Area.tagsFromCache(areaid).each() using ( tag_cache ) {
 				number tagid = tag_cache['id'];
 				string tagval = tag_cache['display'];
-				tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagcheck' id='tagcheckid${tagid}' value='${tagval}' /> ${tagval}</li>";
+				if( not tag_cache['forDelete']  ){
+					tagdisplay += "<li id='chattag_itemslists'><input type='checkbox' name='tagcheck' id='tagcheckid${tagid}' value='${tagval}' /><label> ${tagval}</label></li>";
+				}
 			};
-			tagdisplay += "</div></div>";
+			tagdisplay += "</ul></div></div>";
 			return tagdisplay;
 	}
 	
-	function finishChatSessionTag(array params){	
+	function finishChatSessionTag( array params ){	
 		string tagname = params['withTag'];	
-		number sid = params['value'].toNumber();
-		number tagid = params['tagid'].toNumber();
 		number id = params['id'].toNumber();
-		
-		object session = Workflow.ChatSession.load(sid);
+		number errandId = (params.keyExists('value') ? params['value'].toNumber() : 0);
+		object chatSession = Workflow.ChatSession.chatSessionByErrandID( errandId );
+		object session = Workflow.ChatSession.load( chatSession.id );
+		object errand = Workflow.Errand.load( errandId );
+		array tags = [];
+		object tag;
+		array  tagIDs = ((params['tagid'] isa array) ? params['tagid'] : [params['tagid']]);
 		if(session){
-			if(tagname == 'withtag') {
-			object tag = Workflow.Tag.load( tagid );
-				if(id == 0)
-					session.close(false, tag, false);
-				else
-					session.close(false, tag, true);
-			}else{
-				session.close(false, null, false);
-			}
-			if( ExternalQueueInterface.enabled() and session.queuedInExternal ) {
-				ExternalQueueInterface.removeChat(session);
-			}	
+				if(tagname == 'withtag') {
+					tagIDs.each() using ( tagid ){
+						tag = Workflow.Tag.load( tagid.toNumber() );
+						errand.setValue('tags', errand.tags.addObject( tag ));
+						errand.save();
+					};
+				}else{
+					errand.setValue('tags', null);
+					errand.save();
+				}
 			return JSON.valueToJSON(true);
-		}else
-		{
-			return JSON.valueToJSON(false);
-		}
+		}	
+		return JSON.valueToJSON(false);
+	}
+	
+	function blockIPAddress( array params )	{	
+			string ipaddress = params['ip'];
+			number errandId = params['errand'].toNumber();
+			string email = params['email'];
+			number date_now = Date.GMTnow();
+			object blacklist;
+			object chatsession;
+			object area;
+					
+			chatsession = Workflow.ChatSession.loadSessionByErrand( errandId );
+			
+			blacklist = new Workflow.BlockedIPAddress();
+			blacklist.setValue('ipAddress', "${ipaddress}");
+			blacklist.setValue('timestampWhen', date_now);
+			blacklist.setValue('active', true);
+			blacklist.setValue('area', chatsession.area);
+			blacklist.setValue('user', chatsession.user);
+			blacklist.setValue('email', "${email}");
+			blacklist.save();
+			
+			if( F('chat.forced-tag'))
+				return 'forcedtag';
+			else if ( F('chat.optional-tag'))
+				return 'optionaltag';
+			else
+				return 'none';	
 	}
 	
 	function checkFeature() {
@@ -695,6 +739,249 @@ namespace ChatMCAM {
 			return 'optionaltag';
 		else
 			return 'none';			
+	}
+	function chatAnswerSearch( array parameters ) {
+		array area_list = [];
+		array seenList = [];
+		array result = [];
+		array results = [];
+		string body = '';
+
+		number filterList = parameters['filterList'].toNumber();
+		string term = parameters['search_term'];
+
+		if( filterList > 0 ) {
+		area_list = [ filterList ];
+		} else if( filterList <= 0 ) {
+		area_list = Workflow.Area.idListForUser();
+		}
+
+		result['order'] = [];
+		result['list'] = [];
+		Workflow.Search.run("custom:answer locations:${area_list.join(',')} type:contents-keyword source:either state:any published:yes $term exact:no time:both sort-asc:subject limit:100 offset:0").each() using ( row ) {
+			if( row['body'] ) {
+				if( row['body'].utf8Length() > 50)
+					body = row['body'].utf8Slice(50) + '...';
+				else
+					body = row['body'];
+
+				result['order'][] = row['id'];
+				result['list']['' + row['id']] = [
+				'id' => row['id'],
+				'data' => [
+					'area' => 'All',
+					'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
+					'subject' => row['subject'],
+					'body' => body,
+					'trimBody' => row['body']
+					]
+				];
+			}
+		};
+		return JSON.valueToJSON( result );
+	}
+	function createNoteAttachments( object note, array attachments ) {
+		array list = [];
+		
+		string note_id = '' + note.id;
+		string path_id = note_id.blocks(1).join('/') + '/' + note_id;
+		string attachmentsDirectory = (Config.CachePath - 'Cache/') + 'Workflow/Note-attachments/' + path_id + '/';
+		string uploadsDirectory = (Config.CachePath - 'Cache/') + 'Workflow/Temporary-uploads/';
+		
+		Directory.build(attachmentsDirectory);
+		GUIKit.loadComponent('BackgroundFileUploader');
+		attachments.eachWithIndex() using ( id, index ) {
+			string localName = 'file-' + index;
+			string newPath = attachmentsDirectory + localName;
+			object attachment;
+			object file = new GUIKit.BackgroundFileUploaderUploadedFile(id, uploadsDirectory);
+			
+			file.moveTo(newPath);
+			
+			attachment = new Workflow.NoteAttachment();
+			attachment.setValue('localPath', newPath);
+			attachment.setValue('localName', localName);
+			attachment.setValue('fileName', file.name);
+			attachment.save();
+			
+			list[] = attachment;
+		};
+		
+		return list;
+	}
+	function saveNote( array parameters ) {
+		array notes;
+		array list;
+		object errandView;
+		object note;
+		object client;
+		object thread = new Workflow.Thread();
+		string type = parameters['type'];
+		number errand = parameters['errand'].toNumber();
+		string text = parameters['text'];
+		string attachments = parameters['attachments'];
+		array attachment = attachments.dissect(',');
+		switch( type ) {
+			case 'errand':
+				errandView = Workflow.Errand.loadThreadView( errand );
+				thread.setValue("errands", [errandView]);
+				errandView.setValue("thread",thread);
+				thread.save();
+				errandView.save();
+				if( errandView ) {
+					object notesView = Workflow.Thread.loadNotesView( (errandView.thread ? errandView.thread.id : 0) );
+					if( notesView ) {
+						note = new Workflow.Note();
+						note.setValue('writer', currentUser);
+						note.setValue('timestampWritten', Date.GMTnow());
+						note.setValue('note', text);
+						note.save();
+						if( attachments ) {
+							note.setValue('attachments', .createNoteAttachments(note, attachment));
+							note.save();
+						}
+						notesView.setValue('notes', notesView.notes.addObject(note));
+						notesView.save();
+					}
+				}
+				break;
+			case 'client':
+				errandView = Workflow.Errand.loadClientView( errand );
+				client = new Workflow.Person(); //Empty client
+				client.save();
+				errandView.setValue('client', client);
+				errandView.save();
+				if( errandView and errandView.client ) {
+					note = new Workflow.Note();
+					note.setValue('writer', currentUser);
+					note.setValue('timestampWritten', Date.GMTnow());
+					note.setValue('note', text);
+					note.save();
+					if( attachments ) {
+						note.setValue('attachments', .createNoteAttachments(note, attachment));
+						note.save();
+					}
+					errandView.client.setValue('notes', errandView.client.notes.addObject(note));
+					errandView.client.save();
+				}
+				break;
+		}
+		if( note ) {
+			return JSON.valueToJSON([
+				'note' => [
+					'id' => note.id
+				]
+			]);
+		} else {
+			return JSON.valueToJSON([
+				'error' => true
+			]);
+		}
+	}
+
+	function removeNote( array parameters ) {
+		array notes;
+		array list;
+		object errandThread;
+		object n;
+		string type = parameters['type'];
+		number errand = parameters['errand'].toNumber();
+		number note = parameters['note'].toNumber();
+		switch( type ) {
+			case 'errand':
+				errandThread = Workflow.Errand.loadThreadView(errand);
+				if( errandThread ) {
+					object t = Workflow.Thread.loadNotesView(errandThread.thread.id);
+					if( t ) {
+						n = t.notes.objectWithID(note);
+						if( n ) {
+							t.setValue('notes', t.notes.removeObjectWithID(n.id));
+							t.save();
+							n.delete();
+						}
+					}
+				}
+				break;
+			case 'client':
+				errandThread = Workflow.Errand.loadClientView(errand);
+				if( errandThread and errandThread.client ) {
+					n = errandThread.client.notes.objectWithID(note);
+					if( n ) {
+						errandThread.client.setValue('notes', errandThread.client.notes.removeObjectWithID(n.id));
+						errandThread.client.save();
+						n.delete();
+					}
+				}
+				break;
+		}
+		return 'removeNote';
+	}
+
+	function _getErrandNotes( number errandId ){
+		array list = [];
+		object errand = Workflow.Errand.loadThreadView( errandId );
+		object thread;
+		array notes;
+		if( errand.thread ){
+			thread = Workflow.Thread.loadNotesView( errand.thread.id ); 
+			notes = thread.notes.sort(Array.SORT_DESCENDING ) using ( a, b ) {
+				if( a.timestampWritten < b.timestampWritten ) return -1;
+				if( a.timestampWritten == b.timestampWritten ) return 0;
+				if( a.timestampWritten > b.timestampWritten ) return 1;
+			};
+			notes.each() using ( note ) {
+					list[] = [
+					'id' => note.id,
+					'username' => note.writer.username,
+					'note' => note.note,
+					'writtenDate' => formatDateTime( note.timestampWritten ),
+					'attachments' => (closure {
+						array attachmentList = [];
+						note.attachments.each() using( attachment ) {
+							attachmentList[] = [
+								'fileName' => attachment.fileName,
+								'downloadURL' => uriForApplicationActionWithCommand('workflow', "note/${note.id}/attachment/${attachment.id}/" + attachment.fileName.urlEncode())
+							];
+						};
+						return attachmentList;
+					}).invoke()
+				];
+			};
+			return list;
+		}
+		return [];
+	}
+
+	function _getClientNotes(number errandId ){
+		array list = [];
+		object errand = Workflow.Errand.loadClientView( errandId );
+		if( errand.client ) {
+			array notes = errand.client.notes.sort(Array.SORT_DESCENDING ) using ( a, b ) {
+				if( a.timestampWritten < b.timestampWritten ) return -1;
+				if( a.timestampWritten == b.timestampWritten ) return 0;
+				if( a.timestampWritten > b.timestampWritten ) return 1;
+			};
+			notes.each() using ( note ) {
+				list[] = [
+					'id' => note.id,
+					'username' => note.writer.username,
+					'note' => note.note,
+					'writtenDate' => formatDateTime(note.timestampWritten),
+					'attachments' => (closure {
+						array attachmentList = [];
+						note.attachments.each() using( attachment ) {
+							attachmentList[] = [
+								'fileName' => attachment.fileName,
+								'downloadURL' => uriForApplicationActionWithCommand('workflow', "note/${note.id}/attachment/${attachment.id}/" + attachment.fileName.urlEncode())
+							];
+						};
+						return list;
+					}).invoke()
+				];
+			};
+			return list;
+		}
+		return [];
 	}
 	
 }
@@ -730,6 +1017,20 @@ namespace InternalChat {
 						case 'StandaloneChat.sendMessage':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.sendMessage(parameters));
 							break;
+						case 'GlobalChat_ChatNotesBox.saveNote':
+						case 'StandaloneChat_ChatNotesBox.saveNote':
+						case 'GlobalChat_ContactNotesBox.saveNote':
+						case 'StandaloneChat_ContactNotesBox.saveNote':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.saveNote(parameters));
+							break;
+						case 'GlobalChat_ChatNotesBox.removeNote':
+						case 'StandaloneChat_ChatNotesBox.removeNote':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.removeNote(parameters));
+							break;
+						case 'GlobalChat.chatAnswerSearch':
+						case 'StandaloneChat.chatAnswerSearch':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.chatAnswerSearch(parameters));
+							break;
 						case 'GlobalChat.getAgents':
 						case 'StandaloneChat.getAgents':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAgents(parameters));
@@ -739,14 +1040,8 @@ namespace InternalChat {
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToAgent(parameters));
 							break;
 						case 'GlobalChat.forwardToArea':
+						case 'StandaloneChat.forwardToArea':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.forwardToArea(parameters));
-							break;
-						case 'GlobalChat.getAlternativeAnswers':
-							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getAlternativeAnswers(parameters));
-							break;	
-						case 'GlobalChat.getOpenExternalPopupOption':
-						case 'StandaloneChat.getOpenExternalPopupOption':
-							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.getOpenExternalPopupOption(parameters));
 							break;
 						case 'GlobalChat.finishSession':
 						case 'StandaloneChat.finishSession':
@@ -776,10 +1071,14 @@ namespace InternalChat {
 						case 'StandaloneChat.finishChatSessionTag':
 							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.finishChatSessionTag(parameters));
 							break;
-					case 'GlobalChat.checkFeature':
-					case 'StandaloneChat.checkFeature':
-						channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.checkFeature());
-						break;
+						case 'GlobalChat.checkFeature':
+						case 'StandaloneChat.checkFeature':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.checkFeature());
+							break;
+						case 'GlobalChat.blockIPAddress':
+						case 'StandaloneChat.blockIPAddress':
+							channels[] = HTML.MCAMChannel('Result', commands[1], ChatMCAM.blockIPAddress(parameters));
+							break;
 					}
 					
 					return HTML.MCAMEnvelope(channels.join(','));
