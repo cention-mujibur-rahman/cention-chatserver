@@ -438,59 +438,34 @@ namespace ChatMCAM {
 	
 	function forwardToArea( array parameters ) {
 		object session;
+		object toArea;
 		number now = Date.GMTnow();
-		object owner = null;
-		number agentsAvailable;
-		array list;
-		boolean create = false;
 		object fromUser;
 		object fromArea;
-		if( parameters.keyExists('forward_area_id') or parameters.forward_area_id != 0 ) {		    
-		    Logger.info(Logger.APPLICATION_CHAT, "Forwarding session [${parameters.session}] to available agents in area [${parameters.forward_area_id}]");
-		    SOAP.RPC.setDefaults('http://' + request.hostname() + uriForApplicationAction('chat/interface/-/RPC'));
-		    agentsAvailable = SOAP.RPC.invoke('agentsAvailable', ['area_id' => parameters.forward_area_id], 'number');
-		    if( agentsAvailable ) {
-			Logger.info(Logger.APPLICATION_CHAT, "Agents available in area [${parameters.forward_area_id}] and total agents are [${agentsAvailable}]");
-			list = Workflow.User.availableForChatList( [ parameters.forward_area_id.toNumber() ] );
-			if( list ) {
-			    array possibleOwners = [];
-			    number lowestAmountOfAssignedChats = list[0]['count'];
-			    list.each() using ( row ) {			    
-				if( row['count'] < lowestAmountOfAssignedChats ) {
-					lowestAmountOfAssignedChats = row['count'];
+		if( parameters.keyExists('forward_area_id') or parameters.forward_area_id != 0 ) {
+			toArea = Workflow.Area.tiny( parameters.forward_area_id.toNumber() );
+			session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
+			fromUser = Workflow.User.tiny( (session.user.id ? session.user.id : 0) );
+			fromArea = Workflow.Area.tiny( (session.area.id ? session.area.id : 0) );
+			
+			if( ChatQueueInterface.isOpen( toArea ) ){
+				//session.area need to change because session area should be updated with 
+				// forward area ID.
+				session.area = toArea;
+				if( ChatQueueInterface.addChat( session ) ){
+					session.setValue('area', toArea);
+					session.setValue('fromAgent', fromUser);
+					session.setValue('timestampForward', now);
+					session.setValue('fromArea', fromArea);
+					session.save();
+					Logger.info(Logger.APPLICATION_CHAT, "Chat Session [${session.id}] successfully forwarded to Area [${parameters.forward_area_id}]");
+
+					return JSON.valueToJSON(true);			
+				}else{
+					Logger.info(Logger.APPLICATION_CHAT, "Forward to area not possible at the moments. Possibly no agents available.");
+					return JSON.valueToJSON(false);
 				}
-			    };
-			    list.each() using ( row ) {
-				if( row['count'] == lowestAmountOfAssignedChats ) {
-					possibleOwners[] = row['workflow_user_id'];
-				}
-			    };			
-			    if( possibleOwners ) {
-				    owner = Workflow.User.load(possibleOwners[Math.randomNumber(0, possibleOwners.size() - 1)]);
-				    Logger.info(Logger.APPLICATION_CHAT, "Found possible agent [${owner.id}] under area [${parameters.forward_area_id}]");
-			    }
-			    create = true;
 			}
-			if(create){
-				session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
-			    fromUser = Workflow.User.load( (session.user.id ? session.user.id : 0) );
-			    fromArea = Workflow.Area.load( (session.area.id ? session.area.id : 0) );
-			    if( session and owner ) {
-				object area = Workflow.Area.tiny( parameters.forward_area_id.toNumber() );
-				session.setValue('user', owner);
-				session.setValue('area', area);
-				session.setValue('fromAgent', fromUser);
-				session.setValue('timestampForward', now);
-				session.setValue('fromArea', fromArea);
-				session.save();
-				Logger.info(Logger.APPLICATION_CHAT, "Chat Session [${session.id}] successfully forwarded to User [${owner.id}] in Area [${parameters.forward_area_id}]");
-				return JSON.valueToJSON(true);
-			    }
-			}		   
-		    }else{
-			Logger.info( Logger.APPLICATION_CHAT, "Trying to send chat session [${parameters.session}], forwared to area [${parameters.forward_area_id}], but no agents are available.!!" );
-			return JSON.valueToJSON(false);
-		    }
 		}
 		return JSON.valueToJSON(false);
 	}
