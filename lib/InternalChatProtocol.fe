@@ -2,12 +2,12 @@ uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
 
 global {
-	object currentUser;
+	object currentChatUser;
 }
 
 namespace ChatMCAM {
 	function init {
-		currentUser = Workflow.User.fetchUserObject();
+		currentChatUser = Workflow.User.fetchUserObject();
 		Workflow.FeatureSystem.setup();
 		ExternalQueueInterface.setup();
 	}
@@ -16,7 +16,7 @@ namespace ChatMCAM {
 		return Array.append( [ [ 'id' => 0, 'value' => I('Forward To Agent') ] ], (closure {
 			array list = [];
 			Workflow.User.listFromCache(area_id).each() using ( item ) {
-				if( item['id'] != currentUser.id ) {
+				if( item['id'] != currentChatUser.id ) {
 					object user = Workflow.User.load(item['id']);
 					if( user and user.acceptChat ) {
 						list[] = item;
@@ -145,7 +145,7 @@ namespace ChatMCAM {
 						'started' => session.timestampStarted
 					],
 					'style' => [
-						'bg' => (session.user and session.user.id == currentUser.id ? '#CFC' : '#FFF'),
+						'bg' => (session.user and session.user.id == currentChatUser.id ? '#CFC' : '#FFF'),
 						'bold' => (chat and chat.clientSentLast == 't' ? true : false)
 					]
 				];
@@ -241,7 +241,7 @@ namespace ChatMCAM {
 		if( not ._attemptedActiveSessionsCache ) {
 			._activeSessionsCache = [];
 			Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), Workflow.Area.idListForUserFromCache(),
-				[ currentUser.id ]).each() using ( session )
+				[ currentChatUser.id ]).each() using ( session )
 			{
 				._activeSessionsCache[] = session.id;
 			};
@@ -252,12 +252,12 @@ namespace ChatMCAM {
 	function _getUnseenSessions() {
 		array sessionsWithUnseenMessages;
 		object sessionToShow;
-		sessionsWithUnseenMessages = Workflow.ChatSession.haveUnseenMessagesList(Workflow.SystemGroup.current(), currentUser.id);
+		sessionsWithUnseenMessages = Workflow.ChatSession.haveUnseenMessagesList(Workflow.SystemGroup.current(), currentChatUser.id);
 		if( sessionsWithUnseenMessages ) {
 			sessionToShow = sessionsWithUnseenMessages[0];
 			Logger.info(Logger.APPLICATION_CHAT,
 				"Sending unseen sessions [" + sessionsWithUnseenMessages.join(', ') using( session ) { return session.id; } +
-				"] to ${currentUser.username} [${currentUser.id}]");
+				"] to ${currentChatUser.username} [${currentChatUser.id}]");
 		}
 		if( sessionToShow ) {
 			return [
@@ -295,7 +295,7 @@ namespace ChatMCAM {
 						}).invoke()
 					],
 					'user' => [
-						'openExternalSystem' => currentUser.openExternalSystem
+						'openExternalSystem' => currentChatUser.openExternalSystem
 					]
 				]
 			];
@@ -311,13 +311,13 @@ namespace ChatMCAM {
 		number blockchat_minutes = (F('chat.blacklist.time') ? F('chat.blacklist.time') : 0);
 		number blockchat_seconds = blockchat_minutes * 60;
 		
-		if( currentUser.acceptChat ) {
-			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentUser.username} [${currentUser.id}] - time since last update: " + (closure {
-				return Date.GMTnow() - currentUser.timestampLastChatUpdate;
+		if( currentChatUser.acceptChat ) {
+			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentChatUser.username} [${currentChatUser.id}] - time since last update: " + (closure {
+				return Date.GMTnow() - currentChatUser.timestampLastChatUpdate;
 			}).invoke() + " (${Date.GMTnow()})");
 		}
-		currentUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		currentUser.delayedSave();
+		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
+		currentChatUser.delayedSave();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
 		if(blockchat_minutes != 0) 	{
@@ -337,7 +337,7 @@ namespace ChatMCAM {
 		}
 		
 		return JSON.valueToJSON([
-			'list' => ._getList(area_ids, [currentUser.id]),
+			'list' => ._getList(area_ids, [currentChatUser.id]),
 			'current' => (closure {
 				object session = Workflow.ChatSession.load(session_id);
 				if( session ) {
@@ -376,7 +376,7 @@ namespace ChatMCAM {
 			message.setValue('session', session.id);
 			message.setValue('timestampSent', now);
 			message.setValue('message', parameters['text']);
-			message.setValue('user', currentUser);
+			message.setValue('user', currentChatUser);
 			message.save();
 			if( now > session.timestampLastAgentMessageSent ) {
 				session.setValue('timestampLastAgentMessageSent', now);
@@ -494,10 +494,10 @@ namespace ChatMCAM {
 		// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
 		// More data is needed so full object is loaded.
 		organisation = Workflow.Organisation.load( organisation.id );
-		if( session and session.user and session.user.id == currentUser.id ) {
+		if( session and session.user and session.user.id == currentChatUser.id ) {
 			acquired = true;
 		} else if( session and session.user == null ) {
-			session.setValue('user', currentUser);
+			session.setValue('user', currentChatUser);
 			session.setValue('timestampAssigned', Date.GMTnow());
 			session.save();
 			acquired = true;
@@ -541,7 +541,7 @@ namespace ChatMCAM {
 				}).invoke()
 			],
 			'user' => [
-				'openExternalSystem' => currentUser.openExternalSystem
+				'openExternalSystem' => currentChatUser.openExternalSystem
 			],
 			'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
 			'clientEmail' => (session.client and session.client.email ? session.client.email.emailAddress : ''),
@@ -807,7 +807,7 @@ namespace ChatMCAM {
 					object notesView = Workflow.Thread.loadNotesView( (errandView.thread ? errandView.thread.id : 0) );
 					if( notesView ) {
 						note = new Workflow.Note();
-						note.setValue('writer', currentUser);
+						note.setValue('writer', currentChatUser);
 						note.setValue('timestampWritten', Date.GMTnow());
 						note.setValue('note', text);
 						note.save();
@@ -828,7 +828,7 @@ namespace ChatMCAM {
 				errandView.save();
 				if( errandView and errandView.client ) {
 					note = new Workflow.Note();
-					note.setValue('writer', currentUser);
+					note.setValue('writer', currentChatUser);
 					note.setValue('timestampWritten', Date.GMTnow());
 					note.setValue('note', text);
 					note.save();
