@@ -6,8 +6,6 @@ global {
 }
 
 namespace ChatMCAM {
-	array lastSent;
-	
 	function setupFeatureSystem {
 		Workflow.FeatureSystem.setup();
 	}
@@ -994,14 +992,13 @@ namespace InternalChat {
 		request = req;
 		currentUser = Workflow.User.fetchUserObject();
 		
-		ChatMCAM.setupFeatureSystem();
-		//monitor {
 		if( commands ) {
 			switch( commands[0] ) {
 				case 'MCAM': {
 					array channels = [];
 					
 					allowedToStoreSession = false;
+					ChatMCAM.setupFeatureSystem();
 	
 					ExternalQueueInterface.setup();
 					
@@ -1088,15 +1085,5 @@ namespace InternalChat {
 	
 			}
 		}
-		/*}
-		handle {
-			Console.println("\033[41;33m##########[ERROR]##########\033[0m");
-			Console.print("\033[31m");
-			Console.println(err.str);
-			Console.println(err.stack);
-			Console.println("\033[0m");
-			Console.println("\n\n");
-			return "";
-		}*/
 	}
 }
