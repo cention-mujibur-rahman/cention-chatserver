@@ -95,7 +95,9 @@ namespace ChatMCAM {
 		array list = [];
 		array order = [];
 		array sessions = [];
+		array totalList = [];
 		array activeList = Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids);
+		array visibleList = Workflow.ChatSession.visibleList(Workflow.SystemGroup.current(), area_ids, user_ids);
 		array chats = [];
 		string sqlQuery = "select a.session,message,clientsentlast from (
 				select distinct on (session) session, client_fkey != 0 as clientsentlast
@@ -109,9 +111,9 @@ namespace ChatMCAM {
 						and client_fkey != 0
 						order by session,timestampsent desc
 			) as b on a.session = b.session;";
-		
-		if (activeList.size() > 0) {
-			activeList.each() using ( session ) {
+		totalList = activeList.append(visibleList);
+		if (totalList.size() > 0) {
+			totalList.each() using ( session ) {
 				sessions.push(session.id);
 			};
 			
@@ -123,13 +125,14 @@ namespace ChatMCAM {
 				];
 			};
 			
-			activeList.each() using ( session ) {
+			totalList.each() using ( session ) {
 				array chat = (chats.keyExists("${session.id}") ? chats["${session.id}"] : []);
 				
 				order[] = session.errand.id;
 				list["${session.id}"] = [
 					'id' => session.errand.id,
 					'chatSessionID' => session.id,
+					'visible' => session.visible,
 					'data' => [
 						'id' => session.errand.id,
 						'areaID' => session.area.id,
@@ -474,14 +477,22 @@ namespace ChatMCAM {
 	
 	function finishSession( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
-		if( session ) {
-			session.close(false, false);
-			ChatQueueInterface.endChat(session);
-			Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
-			return JSON.valueToJSON(true);
+		boolean sessionVisible = ( parameters.keyExists('visible' ) ? parameters['visible'].toBoolean() : false);
+		if( sessionVisible ){
+			session.setValue('visible',false );
+			session.save();
+			Logger.info(Logger.APPLICATION_CHAT,"Chat session [${session.id}] has invisible.");
+			return JSON.valueToJSON([ 'status' => 0]);
+		}else{
+			if( session ) {
+				session.close(false, false);
+				ChatQueueInterface.endChat(session);
+				Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
+					return JSON.valueToJSON(['status' => 1]);
+			}
 		}
 		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${session.id}], failure!");
-		return JSON.valueToJSON(false);
+		return JSON.valueToJSON(['status' => 2]);
 	}
 	
 	function acquireSession( array parameters ) {
