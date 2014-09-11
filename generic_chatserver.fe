@@ -28,6 +28,16 @@ function checkRpcConnection () {
 	objSrvLastConnectionTime = now;
 }
 
+function help () {
+	Console.println([
+		'Available commands:',
+		'd - list all open file descriptors',
+		'eval - eval ferite code',
+		'exit - terminates program',
+		'help - prints this help'
+	].join("\n"));
+}
+
 options = [
 	'server' => 'InternalChat',
 	'port' => 9090,
@@ -58,11 +68,50 @@ TIMEOUT = 4.5 * 60;
 application = new DummyApplication();
 application.realName = 'cention-suite';
 
+if (options.console) {
+	object commandLine = new ConsoleServer();
+	
+	commandLine.prompt('> ');
+
+	commandLine.command('exit') using (args) {
+		Sys.exit(0);
+	};
+	
+	commandLine.command('d','descriptors') using (args) {
+		Console.println(EventLoop.descriptors.join("\n"));
+	};
+	
+	commandLine.command('eval') using (args) {
+		monitor {
+			Console.println(eval('return ' + args.join(' ')));
+		}
+		handle {
+			Console.println(err);
+		}
+	};
+	
+	commandLine.command('help') using (args) {
+		help();
+	};
+	
+	commandLine.command('unknown') using (cmd) {
+		if (cmd == [""]) {
+			help();
+		}
+		else {
+			Console.println("Unknown command: $cmd");
+		}
+	};
+}
+
 if (options.server == 'InternalChat') {
 	object chatserver = new HttpServer(options.port);
 	chatserver.sync_post = true;
 	chatserver.onRequest() using (req) {
 		array commands = [ 'MCAM' , req.pathInfo() ];
+		
+		Console.println('Got new request!');
+		
 		checkRpcConnection();
 		req.noCache();
 		req.respond(InternalChat.handleChatRequest(req,commands,req.query));
