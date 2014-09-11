@@ -270,32 +270,8 @@ namespace ChatMCAM {
 					'chatSessionID' => sessionToShow.id, 
 					'client' => (sessionToShow.client and sessionToShow.client.name ? sessionToShow.client.name : I('No Name')),
 					'messages' => ._getAllMessages(sessionToShow),
-					'externalData' => sessionToShow.externalData,
 					'area' => [
-						'id' => (sessionToShow.area ? sessionToShow.area.id : 0),
-						'answers' => (closure {
-							if( F('alternative-answers.show-everything')) {
-								return ._getAlternativeAnswers( sessionToShow.area.id );
-							}
-							return [];
-						}).invoke(),
-						'externalSystemURL' => (closure {
-							// The area object in Workflow.ChatSession is of view Tiny.
-							// This means that it does not contain the variables that are needed here.
-							// That is why the full area object is loaded.
-							object area = Workflow.Area.load(sessionToShow.area.id);
-							if( area.openExternalSystemRules ) {
-								return area.openExternalSystemRules.url;
-							} else {
-								object organisation = Workflow.Organisation.byAreaID(sessionToShow.area.id);
-								// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
-								// More data is needed so full object is loaded.
-								organisation = Workflow.Organisation.load(organisation.id);
-								if( organisation.openExternalSystemRules )
-									return organisation.openExternalSystemRules.url;
-							}
-							return '';
-						}).invoke()
+						'id' => (sessionToShow.area ? sessionToShow.area.id : 0)
 					],
 					'user' => [
 						'openExternalSystem' => currentChatUser.openExternalSystem
