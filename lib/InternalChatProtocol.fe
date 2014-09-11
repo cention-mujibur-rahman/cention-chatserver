@@ -296,7 +296,7 @@ namespace ChatMCAM {
 			}).invoke() + " (${Date.GMTnow()})");
 		}
 		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		currentChatUser.delayedSave();
+		currentChatUser.save();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
 		if(blockchat_minutes != 0) 	{
