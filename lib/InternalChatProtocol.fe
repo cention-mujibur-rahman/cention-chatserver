@@ -1,5 +1,6 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
+uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
 
 global {
 	object currentChatUser;
@@ -947,9 +948,5 @@ namespace ChatMCAM {
 	}
 	
 }
-//Mujibur(2014-09-18): Found the problem for Cache page when other contacts and other 
-// is calling Cache.page
-// This is the solution to cache the page. This will not work with chat server.
-// When the chat server will be full functional then we have to find some other way.
 
-Cache.page = new CentionMainPage();
+Cache.page = new CentionBase();
