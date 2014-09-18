@@ -109,9 +109,6 @@ if (options.server == 'InternalChat') {
 	chatserver.sync_post = true;
 	chatserver.onRequest() using (req) {
 		array commands = [ 'MCAM' , req.pathInfo() ];
-		
-		Console.println('Got new request!');
-		
 		checkRpcConnection();
 		req.noCache();
 		req.respond(InternalChat.handleChatRequest(req,commands,req.query));
