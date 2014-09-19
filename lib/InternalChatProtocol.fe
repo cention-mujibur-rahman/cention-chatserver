@@ -1,5 +1,6 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
+uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
 
 global {
 	object currentChatUser;
@@ -296,7 +297,7 @@ namespace ChatMCAM {
 			}).invoke() + " (${Date.GMTnow()})");
 		}
 		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		currentChatUser.delayedSave();
+		currentChatUser.save();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
 		if(blockchat_minutes != 0) 	{
@@ -948,3 +949,4 @@ namespace ChatMCAM {
 	
 }
 
+Cache.page = new CentionBase();
