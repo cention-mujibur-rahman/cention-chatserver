@@ -1,6 +1,6 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
-uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
+//uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
 
 global {
 	object currentChatUser;
@@ -33,8 +33,9 @@ namespace ChatMCAM {
 			array results = [];
 			array result = [];
 			string body = '';
-			
+			object keyCombination;
 			object area = Workflow.Area.load( area_id );
+
 			if( area ) {
 				object searchRules = area.getExternalSearchRules();
 				if( searchRules and searchRules.enabled and ExternalSearchInterface.isEnabled() ) {
@@ -53,14 +54,16 @@ namespace ChatMCAM {
 					else
 						body = row['body'];
 
+					keyCombination = Workflow.ChatKeyboardShortcut.getKeys( row['id'] );
 					result['order'][] = row['id'];
 					result['list']['' + row['id']] = [
 						'id' => row['id'],
 						'data' => [ 
 							'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 							'subject' => row['subject'],
-							'body' => body,
-							'trimBody' => row['body']
+							'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+							'body' => row['body'],
+							'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 						]
 					];
 				}
@@ -709,14 +712,15 @@ namespace ChatMCAM {
 		array result = [];
 		array results = [];
 		string body = '';
+		object keyCombination;
 
 		number filterList = parameters['filterList'].toNumber();
 		string term = parameters['search_term'];
 
 		if( filterList > 0 ) {
-		area_list = [ filterList ];
+			area_list = [ filterList ];
 		} else if( filterList <= 0 ) {
-		area_list = Workflow.Area.idListForUser();
+			area_list = Workflow.Area.idListForUser();
 		}
 
 		result['order'] = [];
@@ -728,6 +732,7 @@ namespace ChatMCAM {
 				else
 					body = row['body'];
 
+				keyCombination = Workflow.ChatKeyboardShortcut.getKeys( row['id'] );
 				result['order'][] = row['id'];
 				result['list']['' + row['id']] = [
 				'id' => row['id'],
@@ -735,8 +740,9 @@ namespace ChatMCAM {
 					'area' => 'All',
 					'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 					'subject' => row['subject'],
-					'body' => body,
-					'trimBody' => row['body']
+					'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+					'body' => row['body'],
+					'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 					]
 				];
 			}
@@ -949,4 +955,4 @@ namespace ChatMCAM {
 	
 }
 
-Cache.page = new CentionBase();
+Cache.page = new CentionMainPage();
