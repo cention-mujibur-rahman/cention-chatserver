@@ -943,7 +943,7 @@ namespace ChatMCAM {
 								'downloadURL' => uriForApplicationActionWithCommand('workflow', "note/${note.id}/attachment/${attachment.id}/" + attachment.fileName.urlEncode())
 							];
 						};
-						return list;
+						return attachmentList;
 					}).invoke()
 				];
 			};
