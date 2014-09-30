@@ -480,7 +480,7 @@ namespace ChatMCAM {
 			Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
 			return JSON.valueToJSON(true);
 		}
-		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${session.id}], failure!");
+		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${parametes[0]}], failure!");
 		return JSON.valueToJSON(false);
 	}
 	
