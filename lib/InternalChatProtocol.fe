@@ -810,10 +810,12 @@ namespace ChatMCAM {
 				break;
 			case 'client':
 				errandView = Workflow.Errand.loadClientView( errand );
-				client = new Workflow.Person(); //Empty client
-				client.save();
-				errandView.setValue('client', client);
-				errandView.save();
+				if( not errandView.client ) {
+					client = new Workflow.Person(); //Empty client
+					client.save();
+					errandView.setValue('client', client);
+					errandView.save();
+				}
 				if( errandView and errandView.client ) {
 					note = new Workflow.Note();
 					note.setValue('writer', currentChatUser);
