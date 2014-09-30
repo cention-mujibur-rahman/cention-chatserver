@@ -9,7 +9,7 @@ COOKIES=(
 	'cention-suiteWFUserID=2;'
 	'cention-suiteWFPassword=kW83un60RZvFwuehOluJiCws7VU9yOKcdTsSt060ZBI=;'
 	'webframework-session-id=webframework;'
-	'webframework-session-voucher=TLBHTFIQKEKFWGFP'
+	'webframework-session-voucher=TLBYVSTQKHKFGGFP'
 )
 
 ARGV="$@"

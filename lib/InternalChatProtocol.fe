@@ -1,5 +1,6 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
+uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
 
 global {
 	object currentChatUser;
@@ -95,7 +96,9 @@ namespace ChatMCAM {
 		array list = [];
 		array order = [];
 		array sessions = [];
+		array totalList = [];
 		array activeList = Workflow.ChatSession.activeList(Workflow.SystemGroup.current(), area_ids, user_ids);
+		array visibleList = Workflow.ChatSession.visibleList(Workflow.SystemGroup.current(), area_ids, user_ids);
 		array chats = [];
 		string sqlQuery = "select a.session,message,clientsentlast from (
 				select distinct on (session) session, client_fkey != 0 as clientsentlast
@@ -109,9 +112,9 @@ namespace ChatMCAM {
 						and client_fkey != 0
 						order by session,timestampsent desc
 			) as b on a.session = b.session;";
-		
-		if (activeList.size() > 0) {
-			activeList.each() using ( session ) {
+		totalList = activeList.append(visibleList);
+		if (totalList.size() > 0) {
+			totalList.each() using ( session ) {
 				sessions.push(session.id);
 			};
 			
@@ -123,13 +126,14 @@ namespace ChatMCAM {
 				];
 			};
 			
-			activeList.each() using ( session ) {
+			totalList.each() using ( session ) {
 				array chat = (chats.keyExists("${session.id}") ? chats["${session.id}"] : []);
 				
 				order[] = session.errand.id;
 				list["${session.id}"] = [
 					'id' => session.errand.id,
 					'chatSessionID' => session.id,
+					'visible' => session.visible,
 					'data' => [
 						'id' => session.errand.id,
 						'areaID' => session.area.id,
@@ -267,32 +271,8 @@ namespace ChatMCAM {
 					'chatSessionID' => sessionToShow.id, 
 					'client' => (sessionToShow.client and sessionToShow.client.name ? sessionToShow.client.name : I('No Name')),
 					'messages' => ._getAllMessages(sessionToShow),
-					'externalData' => sessionToShow.externalData,
 					'area' => [
-						'id' => (sessionToShow.area ? sessionToShow.area.id : 0),
-						'answers' => (closure {
-							if( F('alternative-answers.show-everything')) {
-								return ._getAlternativeAnswers( sessionToShow.area.id );
-							}
-							return [];
-						}).invoke(),
-						'externalSystemURL' => (closure {
-							// The area object in Workflow.ChatSession is of view Tiny.
-							// This means that it does not contain the variables that are needed here.
-							// That is why the full area object is loaded.
-							object area = Workflow.Area.load(sessionToShow.area.id);
-							if( area.openExternalSystemRules ) {
-								return area.openExternalSystemRules.url;
-							} else {
-								object organisation = Workflow.Organisation.byAreaID(sessionToShow.area.id);
-								// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
-								// More data is needed so full object is loaded.
-								organisation = Workflow.Organisation.load(organisation.id);
-								if( organisation.openExternalSystemRules )
-									return organisation.openExternalSystemRules.url;
-							}
-							return '';
-						}).invoke()
+						'id' => (sessionToShow.area ? sessionToShow.area.id : 0)
 					],
 					'user' => [
 						'openExternalSystem' => currentChatUser.openExternalSystem
@@ -317,7 +297,7 @@ namespace ChatMCAM {
 			}).invoke() + " (${Date.GMTnow()})");
 		}
 		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
-		currentChatUser.delayedSave();
+		currentChatUser.save();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
 		if(blockchat_minutes != 0) 	{
@@ -474,14 +454,22 @@ namespace ChatMCAM {
 	
 	function finishSession( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
-		if( session ) {
-			session.close(false, false);
-			ChatQueueInterface.endChat(session);
-			Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
-			return JSON.valueToJSON(true);
+		boolean sessionVisible = ( parameters.keyExists('visible' ) ? parameters['visible'].toBoolean() : false);
+		if( sessionVisible ){
+			session.setValue('visible',false );
+			session.save();
+			Logger.info(Logger.APPLICATION_CHAT,"Chat session [${session.id}] has invisible.");
+			return JSON.valueToJSON([ 'status' => 0]);
+		}else{
+			if( session ) {
+				session.close(false, false);
+				ChatQueueInterface.endChat(session);
+				Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
+					return JSON.valueToJSON(['status' => 1]);
+			}
 		}
 		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${parametes[0]}], failure!");
-		return JSON.valueToJSON(false);
+		return JSON.valueToJSON(['status' => 2]);
 	}
 	
 	function acquireSession( array parameters ) {
@@ -961,3 +949,4 @@ namespace ChatMCAM {
 	
 }
 
+Cache.page = new CentionBase();
