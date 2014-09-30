@@ -787,12 +787,15 @@ namespace ChatMCAM {
 		switch( type ) {
 			case 'errand':
 				errandView = Workflow.Errand.loadThreadView( errand );
-				thread.setValue("errands", [errandView]);
-				errandView.setValue("thread",thread);
-				thread.save();
-				errandView.save();
 				if( errandView ) {
-					object notesView = Workflow.Thread.loadNotesView( (errandView.thread ? errandView.thread.id : 0) );
+					object notesView;
+					if( not errandView.thread ) {
+						thread.setValue("errands", [errandView]);
+						errandView.setValue("thread",thread);
+						thread.save();
+						errandView.save();
+					}
+					notesView = Workflow.Thread.loadNotesView( (errandView.thread ? errandView.thread.id : 0) );
 					if( notesView ) {
 						note = new Workflow.Note();
 						note.setValue('writer', currentChatUser);
