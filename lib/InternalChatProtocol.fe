@@ -1,6 +1,6 @@
 uses 'chatqueue/chatqueue';
 uses 'asyncJsonRPC';
-//uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
+uses '/cention/webroot/Cention.app/Support/Pages/CentionBase';
 
 global {
 	object currentChatUser;
@@ -955,4 +955,4 @@ namespace ChatMCAM {
 	
 }
 
-Cache.page = new CentionMainPage();
+Cache.page = new CentionBase();
