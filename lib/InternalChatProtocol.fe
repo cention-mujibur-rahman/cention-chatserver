@@ -452,6 +452,49 @@ namespace ChatMCAM {
 		return JSON.valueToJSON(false);
 	}
 	
+	function sendChatHistoryEmailToClient( object session ){
+		object bodyContents = null;
+		string to = (session.client && session.client.email ? session.client.email.emailAddress : '');
+		object logClosure = closure ( string text ) {};
+		object connection = new Mail.Connection();
+		object to_addr = new Mail.Address( to );
+		bodyContents = (closure{
+			string body = "";
+			string htmlBody;
+			object message = new Mail.Message();
+			object text = new Mail.MessagePart();
+			object from = Workflow.Person.load( (session.user ? session.user.id : 0) );
+			array messages = Workflow.ChatMessage.listBySession( session.id );
+			message.header = new Mail.MessageHeader();		
+			message.header.to.add(to_addr);		
+			message.header.subject = I('Chat history');
+			message = MailUtilities.setOutgoingHeader(message, from.email.emailAddress);
+			messages.each() using ( content ) {
+				string sender = (content.user
+								? (content.user.chatName ? content.user.chatName : content.user.username)
+								: (session.client ? session.client.name : I('No Name'))
+								);
+				body += "(${formatDateTime(content.timestampSent)}) ${sender}: ${content.message}\r\n";
+			};
+			body = Regexp.replaceAll("\r\n", body, "\n");
+			body = Regexp.replaceAll("\r", body, "\n");
+			body = Regexp.replaceAll("\n", body, "\r\n");
+
+			text.type = Mail.Mime.TYPETEXT;
+			text.subtype = "plain";
+			text.charset = "UTF-8";
+			text.content = body;
+			message.content = text;
+			return message;
+		}).invoke();
+
+		if( MailUtilities.sendMessage(connection, bodyContents, logClosure) ) {
+			Logger.info(Logger.APPLICATION_CHAT, "- Chat history email to [${to}] Done.");
+		} else {
+			Logger.info(Logger.APPLICATION_CHAT,"!! Failed chat history to send in email.");
+		}
+	}
+
 	function finishSession( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		boolean sessionVisible = ( parameters.keyExists('visible' ) ? parameters['visible'].toBoolean() : false);
@@ -465,7 +508,14 @@ namespace ChatMCAM {
 				session.close(false, false);
 				ChatQueueInterface.endChat(session);
 				Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
-					return JSON.valueToJSON(['status' => 1]);
+				if( F('chat.history-send-to-client') ){
+					monitor{
+						.sendChatHistoryEmailToClient( session );
+					}handle{
+						Logger.info(Logger.APPLICATION_CHAT, "!! Unable to send email: ${err.str.trim("\n")}");
+					}
+				}
+				return JSON.valueToJSON(['status' => 1]);
 			}
 		}
 		Logger.info(Logger.APPLICATION_CHAT, "Trying to close the chat session [${parametes[0]}], failure!");
