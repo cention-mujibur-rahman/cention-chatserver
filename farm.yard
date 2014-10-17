@@ -2,7 +2,7 @@
 <yard name="cention-chatserver">
 
 	<property id="name" value="cention-chatserver" />
-	<property id="version" value="1.0" />
+	<property id="version" value="3.8" />
 	
 	<collection id="chatserver">
 		<list type="module">
