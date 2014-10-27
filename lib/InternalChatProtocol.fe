@@ -466,12 +466,12 @@ namespace ChatMCAM {
 			string htmlBody;
 			object message = new Mail.Message();
 			object text = new Mail.MessagePart();
-			object from = Workflow.Person.load( (session.user ? session.user.id : 0) );
+			object area = Workflow.Area.load( session.area.id );
 			array messages = Workflow.ChatMessage.listBySession( session.id );
 			message.header = new Mail.MessageHeader();		
 			message.header.to.add(to_addr);		
 			message.header.subject = I('Chat history');
-			message = MailUtilities.setOutgoingHeader(message, from.email.emailAddress);
+			message = MailUtilities.setOutgoingHeader(message, area.replyToEmailAddress);
 			messages.each() using ( content ) {
 				string sender = (content.user
 								? (content.user.chatName ? content.user.chatName : content.user.username)
