@@ -469,6 +469,7 @@ namespace ChatMCAM {
 		object logClosure = closure ( string text ) {};
 		object connection = new Mail.Connection();
 		object to_addr = new Mail.Address( to );
+		object from_addr;
 		bodyContents = (closure{
 			string body = "";
 			string htmlBody;
@@ -476,7 +477,9 @@ namespace ChatMCAM {
 			object text = new Mail.MessagePart();
 			object area = Workflow.Area.load(session.area.id);
 			array messages = Workflow.ChatMessage.listBySession( session.id );
-			message.header = new Mail.MessageHeader();		
+			from_addr = new Mail.Address( area.replyToEmailAddress );
+			message.header = new Mail.MessageHeader();
+			message.header.from.add( from_addr );		
 			message.header.to.add(to_addr);		
 			message.header.subject = I('Chat history');
 			message = MailUtilities.setOutgoingHeader(message, area.replyToEmailAddress);
