@@ -162,10 +162,10 @@ namespace ChatMCAM {
 						'areaID' => session.area.id,
 						'area' => session.area.name,
 						'message' => (chat and chat.message
-							? (chat.message.utf8Length() > 125 ? chat.message.utf8Slice(125) + '...' : chat.message)
+							? (chat.message.utf8Length() > 125 ? ._formatBody(chat.message.utf8Slice(125)) + '...' : ._formatBody(chat.message))
 							: I('No Message')),
-						'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
-						'email' => (session.client and session.client.email ? session.client.email.emailAddress : I('No Sender')),
+						'client' => (session.client and session.client.name ? ._formatBody(session.client.name) : I('No Name')),
+						'email' => (session.client and session.client.email ? ._formatBody(session.client.email.emailAddress) : I('No Sender')),
 						'assigned' => (session.user ? 1 : 0),
 						'owner' => (session.user ? session.user.username : I('Unassigned')),
 						'startedHuman' => formatDateTime(session.timestampStarted),
@@ -191,7 +191,7 @@ namespace ChatMCAM {
 			list[] = ._messageToArray(message);
 		};
 		if( session.clientReportedAsInactive ) {
-			string clientName = (session.client ? session.client.name : I('No Name'));
+			string clientName = (session.client ? ._formatBody(session.client.name) : I('No Name'));
 			list[] = [
 				'id' => 0,
 				'sender' => I('System'),
@@ -218,7 +218,7 @@ namespace ChatMCAM {
 			object session = Workflow.ChatSession.load(sessionID);
 			if( not session.active ) {
 				if( not session.clientReportedAsOffline ) {
-					string clientName = (session.client ? session.client.name : I('No Name'));
+					string clientName = (session.client ? ._formatBody(session.client.name) : I('No Name'));
 					list[] = [
 						'id' => 0,
 						'sender' => I('System'),
@@ -243,7 +243,7 @@ namespace ChatMCAM {
 					if( session.timestampLastClientUpdate <= watermark ) {
 						// If we get here we consider the client to have become inactive.
 						// It is time to display a message.
-						string clientName = (session.client ? session.client.name : 'No Name');
+						string clientName = (session.client ? ._formatBody(session.client.name) : 'No Name');
 						list[] = [
 							'id' => 0,
 							'sender' => I('System'),
@@ -346,8 +346,8 @@ namespace ChatMCAM {
 				if( session ) {
 					return [
 						'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
-						'clientEmail' => (session.client and session.client.email ? session.client.email.emailAddress : ''),
-						'preview' => session.nextClientMessagePreview,
+						'clientEmail' => (session.client and session.client.email ? ._formatBody(session.client.email.emailAddress) : ''),
+						'preview' => ._formatBody(session.nextClientMessagePreview),
 						'showMessagePreview' => ( session.user && session.user.chatMessagePreview ? session.user.chatMessagePreview : 0 ),
 						'messages' => ._getMessages(session.id, (parameters.keyExists('timestampLastMessage')
 							? parameters['timestampLastMessage'].toNumber()
@@ -607,8 +607,8 @@ namespace ChatMCAM {
 			'user' => [
 				'openExternalSystem' => currentChatUser.openExternalSystem
 			],
-			'client' => (session.client and session.client.name ? session.client.name : I('No Name')),
-			'clientEmail' => (session.client and session.client.email ? session.client.email.emailAddress : ''),
+			'client' => (session.client and session.client.name ? ._formatBody(session.client.name) : I('No Name')),
+			'clientEmail' => (session.client and session.client.email ? ._formatBody(session.client.email.emailAddress) : ''),
 			'tag' => (closure{
 					if( Workflow.Area.tagsFromCache( session.area.id ))
 						return true;
