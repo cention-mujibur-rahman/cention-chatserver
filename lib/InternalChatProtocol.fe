@@ -61,7 +61,7 @@ namespace ChatMCAM {
 						'data' => [ 
 							'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 							'subject' => row['subject'],
-							'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+							'trimBody' => body + ( keyCombination ? '&nbsp;<span style="color:#898E79;">(' + keyCombination.shortcut +')</span>' : ''),
 							'body' => row['body'],
 							'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 						]
@@ -813,7 +813,7 @@ namespace ChatMCAM {
 					'area' => 'All',
 					'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 					'subject' => row['subject'],
-					'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+					'trimBody' => body + ( keyCombination ? '&nbsp;<span style="color:#898E79;">(' + keyCombination.shortcut +')</span>' : ''),
 					'body' => row['body'],
 					'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 					]
