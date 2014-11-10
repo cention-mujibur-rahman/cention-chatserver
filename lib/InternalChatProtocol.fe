@@ -61,7 +61,7 @@ namespace ChatMCAM {
 						'data' => [ 
 							'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 							'subject' => row['subject'],
-							'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+							'trimBody' => body + ( keyCombination ? '&nbsp;<span style="color:#898E79;">(' + keyCombination.shortcut +')</span>' : ''),
 							'body' => row['body'],
 							'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 						]
@@ -92,7 +92,6 @@ namespace ChatMCAM {
 	
 	function _formatBody( string body ) {
 		object r = new Regexp('(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])', 'i');
-
 		body = r.replaceAll(body) using ( match ) {
 			return Regexp.replaceAll('\/', match.match(), '___SLASH___');
 		};
@@ -481,14 +480,17 @@ namespace ChatMCAM {
 		object logClosure = closure ( string text ) {};
 		object connection = new Mail.Connection();
 		object to_addr = new Mail.Address( to );
+		object from_addr;
 		bodyContents = (closure{
 			string body = "";
 			string htmlBody;
 			object message = new Mail.Message();
 			object text = new Mail.MessagePart();
-			object area = Workflow.Area.load( session.area.id );
+			object area = Workflow.Area.load(session.area.id);
 			array messages = Workflow.ChatMessage.listBySession( session.id );
-			message.header = new Mail.MessageHeader();		
+			from_addr = new Mail.Address( area.replyToEmailAddress );
+			message.header = new Mail.MessageHeader();
+			message.header.from.add( from_addr );		
 			message.header.to.add(to_addr);		
 			message.header.subject = I('Chat history');
 			message = MailUtilities.setOutgoingHeader(message, area.replyToEmailAddress);
@@ -517,7 +519,6 @@ namespace ChatMCAM {
 			Logger.info(Logger.APPLICATION_CHAT,"!! Failed chat history to send in email.");
 		}
 	}
-
 	function finishSession( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		boolean sessionVisible = ( parameters.keyExists('visible' ) ? parameters['visible'].toBoolean() : false);
@@ -810,7 +811,7 @@ namespace ChatMCAM {
 					'area' => 'All',
 					'left_arrow' => '<img src="{0}" onclick="_publishedAnswerCopyTo({1})" style="vertical-align:top;background-color: #FCAB46; cursor: pointer;" border="0" />'.expand( uriForImageResource('submit_arrow_left.png'), row['id']),
 					'subject' => row['subject'],
-					'trimBody' => body + '&nbsp;<span style="color:#898E79;">(' +(keyCombination ? keyCombination.shortcut : '')+')</span>',
+					'trimBody' => body + ( keyCombination ? '&nbsp;<span style="color:#898E79;">(' + keyCombination.shortcut +')</span>' : ''),
 					'body' => row['body'],
 					'shortkey' => (keyCombination ? keyCombination.shortcut : '')
 					]
