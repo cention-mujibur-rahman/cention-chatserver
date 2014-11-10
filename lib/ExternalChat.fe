@@ -64,7 +64,7 @@ namespace ChatPage {
 	
 	function formatDate( number date ) {
 		number localOffset = (Config.TimeZoneOffset * 60);
-		number localDate = date + localOffset + Date.timezone();
+		number localDate = date + localOffset;
 		return Date.localDate(localDate).format(ChatConfig.DateFormat);
 	}
 	
@@ -99,7 +99,7 @@ namespace ChatPage {
 		if( ChatConfig.AutomaticBlacklistIP ) {
 				object blacklist;
 				object chatsession;
-				number date_now = Date.GMTnow();
+				number date_now = Date.now();
 				number sameip = 0;
 				number errand_id;
 				string emailaddress = String.trim(email, '');
@@ -161,13 +161,13 @@ namespace ChatPage {
 					if( update.session > 0 ) {
 						object data = new Workflow.ReportChatData();
 						data.setValue('area_id', ChatConfig.RPCTargetArea);
-						data.setValue('timestamp_when', Date.GMTnow());
+						data.setValue('timestamp_when', Date.now());
 						data.setValue('accepted', true);
 						data.save();
 					} else {
 						object data = new Workflow.ReportChatData();
 						data.setValue('area_id', ChatConfig.RPCTargetArea);
-						data.setValue('timestamp_when', Date.GMTnow());
+						data.setValue('timestamp_when', Date.now());
 						data.setValue('rejected_unavailable', true);
 						data.save();
 					}
@@ -234,7 +234,7 @@ namespace ChatPage {
 					if( parameters.keyExists('preview') ) {
 						session.setValue('nextClientMessagePreview', parameters['preview']);
 					}
-					session.setValue('timestampLastClientUpdate', Date.GMTnow());
+					session.setValue('timestampLastClientUpdate', Date.now());
 					session.save();
 					Workflow.ChatMessage.listBySessionAfterTimestamp(session.id, timestamp).each() using ( message ) {
 						if( message.user ) {
@@ -277,7 +277,7 @@ namespace ChatPage {
 				object session = Workflow.ChatSession.load(parameters['session'].toNumber());
 				if( session and session.active ) {
 					object message = new Workflow.ChatMessage();
-					message.setValue('timestampSent', Date.GMTnow());
+					message.setValue('timestampSent', Date.now());
 					message.setValue('message', parameters['message']);
 					message.setValue('session', session.id);
 					message.setValue('client', session.client);
