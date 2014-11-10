@@ -234,7 +234,7 @@ namespace ChatMCAM {
 				// we check if the client has become inactive.
 				
 				if( not session.clientReportedAsInactive ) {
-					number now = Date.GMTnow();
+					number now = Date.now();
 					number timeout = (F('chat.inactive-timeout') ? F('chat.inactive-timeout') : 1);
 					number timeoutSeconds = timeout * 60;
 					number watermark = now - timeoutSeconds;
@@ -309,16 +309,16 @@ namespace ChatMCAM {
 		number session_id = 0;
 		array area_ids = [];
 		array user_ids = [];
-		number current_time = Date.GMTnow();
+		number current_time = Date.now();
 		number blockchat_minutes = (F('chat.blacklist.time') ? F('chat.blacklist.time') : 0);
 		number blockchat_seconds = blockchat_minutes * 60;
 		
 		if( currentChatUser.acceptChat ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentChatUser.username} [${currentChatUser.id}] - time since last update: " + (closure {
-				return Date.GMTnow() - currentChatUser.timestampLastChatUpdate;
-			}).invoke() + " (${Date.GMTnow()})");
+				return Date.now() - currentChatUser.timestampLastChatUpdate;
+			}).invoke() + " (${Date.now()})");
 		}
-		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
+		currentChatUser.setValue('timestampLastChatUpdate', Date.now());
 		currentChatUser.save();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
@@ -373,7 +373,7 @@ namespace ChatMCAM {
 	function sendMessage( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		if( session ) {
-			number now = Date.GMTnow();
+			number now = Date.now();
 			object message = new Workflow.ChatMessage();
 			message.setValue('session', session.id);
 			message.setValue('timestampSent', now);
@@ -406,7 +406,7 @@ namespace ChatMCAM {
 	}
 
 	function forwardToAgent( array parameters ) {
-		number now = Date.GMTnow();
+		number now = Date.now();
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		object user = Workflow.User.load((parameters.keyExists('forward')
 			? parameters['forward'].toNumber()
@@ -443,7 +443,7 @@ namespace ChatMCAM {
 	function forwardToArea( array parameters ) {
 		object session;
 		object toArea;
-		number now = Date.GMTnow();
+		number now = Date.now();
 		object fromUser;
 		object fromArea;
 		if( parameters.keyExists('forward_area_id') or parameters.forward_area_id != 0 ) {
@@ -560,7 +560,7 @@ namespace ChatMCAM {
 			acquired = true;
 		} else if( session and session.user == null ) {
 			session.setValue('user', currentChatUser);
-			session.setValue('timestampAssigned', Date.GMTnow());
+			session.setValue('timestampAssigned', Date.now());
 			session.save();
 			acquired = true;
 		}
@@ -745,7 +745,7 @@ namespace ChatMCAM {
 			string ipaddress = params['ip'];
 			number errandId = params['errand'].toNumber();
 			string email = params['email'];
-			number date_now = Date.GMTnow();
+			number date_now = Date.now();
 			object blacklist;
 			object chatsession;
 			object area;
@@ -876,7 +876,7 @@ namespace ChatMCAM {
 					if( notesView ) {
 						note = new Workflow.Note();
 						note.setValue('writer', currentChatUser);
-						note.setValue('timestampWritten', Date.GMTnow());
+						note.setValue('timestampWritten', Date.now());
 						note.setValue('note', text);
 						note.save();
 						if( attachments ) {
@@ -899,7 +899,7 @@ namespace ChatMCAM {
 				if( errandView and errandView.client ) {
 					note = new Workflow.Note();
 					note.setValue('writer', currentChatUser);
-					note.setValue('timestampWritten', Date.GMTnow());
+					note.setValue('timestampWritten', Date.now());
 					note.setValue('note', text);
 					note.save();
 					if( attachments ) {
