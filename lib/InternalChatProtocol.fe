@@ -70,7 +70,7 @@ namespace ChatMCAM {
 			};
 			return [ 'list' => result, 'data' => data ];
 	}
-	function _messageToArray( object message ) {
+	function _messageToArray( object message, string zoneName ) {
 		return [
 			'id' => message.id,
 			'sender' => (message.user
@@ -85,7 +85,7 @@ namespace ChatMCAM {
 				),
 			'body' => ._formatBody(message.message),
 			'sent' => message.timestampSent,
-			'sentHuman' => formatTime(message.timestampSent),
+			'sentHuman' => formatTimeTZ(message.timestampSent,zoneName),
 			'colour' => (message.user ? '#0000FF' : '#FF0000')
 		];
 	}
@@ -150,7 +150,8 @@ namespace ChatMCAM {
 			
 			totalList.each() using ( session ) {
 				array chat = (chats.keyExists("${session.id}") ? chats["${session.id}"] : []);
-				
+				object fullUser= Workflow.User.load(session.user.id);
+				string zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
 				order[] = session.errand.id;
 				list["${session.id}"] = [
 					'id' => session.errand.id,
@@ -167,7 +168,7 @@ namespace ChatMCAM {
 						'email' => (session.client and session.client.email ? ._formatBody(session.client.email.emailAddress) : I('No Sender')),
 						'assigned' => (session.user ? 1 : 0),
 						'owner' => (session.user ? session.user.username : I('Unassigned')),
-						'startedHuman' => formatDateTime(session.timestampStarted),
+						'startedHuman' => formatDateTimeTZ(session.timestampStarted, zoneName),
 						'started' => session.timestampStarted
 					],
 					'style' => [
@@ -184,10 +185,10 @@ namespace ChatMCAM {
 		];
 	}
 
-	function _getAllMessages( object session ) {
+	function _getAllMessages( object session, string zoneName ) {
 		array list = [];
 		Workflow.ChatMessage.listBySession(session.id).each() using ( message ) {
-			list[] = ._messageToArray(message);
+			list[] = ._messageToArray(message, zoneName);
 		};
 		if( session.clientReportedAsInactive ) {
 			string clientName = (session.client ? ._formatBody(session.client.name) : I('No Name'));
@@ -196,7 +197,7 @@ namespace ChatMCAM {
 				'sender' => I('System'),
 				'body' => I('{0} has become inactive and most likely closed the chat window.').expand(clientName),
 				'sent' => session.timestampClientReportedAsInactive,
-				'sentHuman' => formatTime(session.timestampClientReportedAsInactive),
+				'sentHuman' => formatTimeTZ(session.timestampClientReportedAsInactive, zoneName),
 				'colour' => '#000000'
 			];
 			list = list.sort() using ( a, b ) {
@@ -210,11 +211,14 @@ namespace ChatMCAM {
 	
 	function _getMessages( number sessionID, number timestampLastMessage ) {
 		array list = [];
+		object session = Workflow.ChatSession.load(sessionID);
+		object fullUser= Workflow.User.load(session.user.id);
+		string zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
+
 		Workflow.ChatMessage.listBySessionAfterTimestampOnlyFromClient(sessionID, timestampLastMessage).each() using ( message ) {
-			list[] = ._messageToArray(message);
+			list[] = ._messageToArray(message, zoneName);
 		};
 		if( not list ) {
-			object session = Workflow.ChatSession.load(sessionID);
 			if( not session.active ) {
 				if( not session.clientReportedAsOffline ) {
 					string clientName = (session.client ? ._formatBody(session.client.name) : I('No Name'));
@@ -223,7 +227,7 @@ namespace ChatMCAM {
 						'sender' => I('System'),
 						'body' => I('{0} has closed the chat window.').expand(clientName),
 						'sent' => session.timestampEnded,
-						'sentHuman' => formatTime(session.timestampEnded),
+						'sentHuman' => formatTimeTZ(session.timestampEnded, zoneName),
 						'colour' => '#000000'
 					];
 					session.setValue('clientReportedAsOffline', true);
@@ -234,7 +238,7 @@ namespace ChatMCAM {
 				// we check if the client has become inactive.
 				
 				if( not session.clientReportedAsInactive ) {
-					number now = Date.GMTnow();
+					number now = Date.now();
 					number timeout = (F('chat.inactive-timeout') ? F('chat.inactive-timeout') : 1);
 					number timeoutSeconds = timeout * 60;
 					number watermark = now - timeoutSeconds;
@@ -248,7 +252,7 @@ namespace ChatMCAM {
 							'sender' => I('System'),
 							'body' => I('{0} has become inactive and most likely closed the chat window.').expand(clientName),
 							'sent' => now,
-							'sentHuman' => formatTime(now),
+							'sentHuman' => formatTimeTZ(now, zoneName),
 							'colour' => '#000000'
 						];
 						session.setValue('clientReportedAsInactive', true);
@@ -278,6 +282,8 @@ namespace ChatMCAM {
 	function _getUnseenSessions() {
 		array sessionsWithUnseenMessages;
 		object sessionToShow;
+		object fullUser;
+		string zoneName;
 		sessionsWithUnseenMessages = Workflow.ChatSession.haveUnseenMessagesList(Workflow.SystemGroup.current(), currentChatUser.id);
 		if( sessionsWithUnseenMessages ) {
 			sessionToShow = sessionsWithUnseenMessages[0];
@@ -285,6 +291,8 @@ namespace ChatMCAM {
 				"Sending unseen sessions [" + sessionsWithUnseenMessages.join(', ') using( session ) { return session.id; } +
 				"] to ${currentChatUser.username} [${currentChatUser.id}]");
 		}
+		fullUser = Workflow.User.load(currentChatUser.id);
+		zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
 		if( sessionToShow ) {
 			return [
 				'list' => sessionsWithUnseenMessages.process() using( session ) { return session.id; },
@@ -292,7 +300,7 @@ namespace ChatMCAM {
 					'id' => (sessionToShow.errand and sessionToShow.errand.id ? sessionToShow.errand.id : 0 ),
 					'chatSessionID' => sessionToShow.id, 
 					'client' => (sessionToShow.client and sessionToShow.client.name ? sessionToShow.client.name : I('No Name')),
-					'messages' => ._getAllMessages(sessionToShow),
+					'messages' => ._getAllMessages(sessionToShow, zoneName),
 					'area' => [
 						'id' => (sessionToShow.area ? sessionToShow.area.id : 0)
 					],
@@ -309,16 +317,16 @@ namespace ChatMCAM {
 		number session_id = 0;
 		array area_ids = [];
 		array user_ids = [];
-		number current_time = Date.GMTnow();
+		number current_time = Date.now();
 		number blockchat_minutes = (F('chat.blacklist.time') ? F('chat.blacklist.time') : 0);
 		number blockchat_seconds = blockchat_minutes * 60;
 		
 		if( currentChatUser.acceptChat ) {
 			Logger.info(Logger.APPLICATION_CHAT, "Update -> ${currentChatUser.username} [${currentChatUser.id}] - time since last update: " + (closure {
-				return Date.GMTnow() - currentChatUser.timestampLastChatUpdate;
-			}).invoke() + " (${Date.GMTnow()})");
+				return Date.now() - currentChatUser.timestampLastChatUpdate;
+			}).invoke() + " (${Date.now()})");
 		}
-		currentChatUser.setValue('timestampLastChatUpdate', Date.GMTnow());
+		currentChatUser.setValue('timestampLastChatUpdate', Date.now());
 		currentChatUser.save();
 		area_ids = Workflow.Area.idListForUserFromCache();
 		
@@ -373,7 +381,7 @@ namespace ChatMCAM {
 	function sendMessage( array parameters ) {
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		if( session ) {
-			number now = Date.GMTnow();
+			number now = Date.now();
 			object message = new Workflow.ChatMessage();
 			message.setValue('session', session.id);
 			message.setValue('timestampSent', now);
@@ -406,7 +414,7 @@ namespace ChatMCAM {
 	}
 
 	function forwardToAgent( array parameters ) {
-		number now = Date.GMTnow();
+		number now = Date.now();
 		object session = Workflow.ChatSession.load( (parameters.keyExists('session') ? parameters['session'].toNumber() : 0));
 		object user = Workflow.User.load((parameters.keyExists('forward')
 			? parameters['forward'].toNumber()
@@ -443,7 +451,7 @@ namespace ChatMCAM {
 	function forwardToArea( array parameters ) {
 		object session;
 		object toArea;
-		number now = Date.GMTnow();
+		number now = Date.now();
 		object fromUser;
 		object fromArea;
 		if( parameters.keyExists('forward_area_id') or parameters.forward_area_id != 0 ) {
@@ -481,6 +489,8 @@ namespace ChatMCAM {
 		object connection = new Mail.Connection();
 		object to_addr = new Mail.Address( to );
 		object from_addr;
+		object fullUser= Workflow.User.load(session.user.id);
+		string zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
 		bodyContents = (closure{
 			string body = "";
 			string htmlBody;
@@ -499,7 +509,7 @@ namespace ChatMCAM {
 								? (content.user.chatName ? content.user.chatName : content.user.username)
 								: (session.client ? session.client.name : I('No Name'))
 								);
-				body += "(${formatDateTime(content.timestampSent)}) ${sender}: ${content.message}\r\n";
+				body += "(${formatDateTimeTZ(content.timestampSent, zoneName)}) ${sender}: ${content.message}\r\n";
 			};
 			body = Regexp.replaceAll("\r\n", body, "\n");
 			body = Regexp.replaceAll("\r", body, "\n");
@@ -552,6 +562,9 @@ namespace ChatMCAM {
 		object session = Workflow.ChatSession.load( chatSession.id );
 		boolean acquired = false;
 		object organisation = Workflow.Organisation.byAreaID( session.area.id );
+		object fullUser;
+		string zoneName;
+		number secondsOffset;
 		
 		// Workflow.Organisation.byAreaID() returns organisation object of view Tiny.
 		// More data is needed so full object is loaded.
@@ -560,19 +573,24 @@ namespace ChatMCAM {
 			acquired = true;
 		} else if( session and session.user == null ) {
 			session.setValue('user', currentChatUser);
-			session.setValue('timestampAssigned', Date.GMTnow());
+			session.setValue('timestampAssigned', Date.now());
 			session.save();
 			acquired = true;
 		}
 
+		fullUser = Workflow.User.load(session.user.id);
+		zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
+		secondsOffset = Workflow.TimeZone.getTimeZoneOffset(zoneName);
+
 		return JSON.valueToJSON([
 			'acquired' => acquired,
+			'secondsOffset' => secondsOffset,
 			'chatSessionID' => session.id,
 			'externalData' => session.externalData,
-			'startedHuman' => formatDateTime(session.timestampStarted),
+			'startedHuman' => formatDateTimeTZ(session.timestampStarted, zoneName),
 			'messages' => (closure {
 				if( acquired) {
-					return ._getAllMessages(session);
+					return ._getAllMessages(session, zoneName);
 				}
 				return [];
 			}).invoke(),
@@ -621,8 +639,8 @@ namespace ChatMCAM {
 						return 0;
 					}
 				}).invoke(),
-			'errand_notes' => ._getErrandNotes( errandId ),
-			'client_notes' => ._getClientNotes( errandId ),
+			'errand_notes' => ._getErrandNotes( errandId, zoneName ),
+			'client_notes' => ._getClientNotes( errandId, zoneName ),
 			'ipaddress' =>  session.ipAddress
 		]);
 	}
@@ -745,7 +763,7 @@ namespace ChatMCAM {
 			string ipaddress = params['ip'];
 			number errandId = params['errand'].toNumber();
 			string email = params['email'];
-			number date_now = Date.GMTnow();
+			number date_now = Date.now();
 			object blacklist;
 			object chatsession;
 			object area;
@@ -876,7 +894,7 @@ namespace ChatMCAM {
 					if( notesView ) {
 						note = new Workflow.Note();
 						note.setValue('writer', currentChatUser);
-						note.setValue('timestampWritten', Date.GMTnow());
+						note.setValue('timestampWritten', Date.now());
 						note.setValue('note', text);
 						note.save();
 						if( attachments ) {
@@ -899,7 +917,7 @@ namespace ChatMCAM {
 				if( errandView and errandView.client ) {
 					note = new Workflow.Note();
 					note.setValue('writer', currentChatUser);
-					note.setValue('timestampWritten', Date.GMTnow());
+					note.setValue('timestampWritten', Date.now());
 					note.setValue('note', text);
 					note.save();
 					if( attachments ) {
@@ -962,7 +980,7 @@ namespace ChatMCAM {
 		return 'removeNote';
 	}
 
-	function _getErrandNotes( number errandId ){
+	function _getErrandNotes( number errandId, string zoneName ){
 		array list = [];
 		object errand = Workflow.Errand.loadThreadView( errandId );
 		object thread;
@@ -979,7 +997,8 @@ namespace ChatMCAM {
 					'id' => note.id,
 					'username' => note.writer.username,
 					'note' => note.note,
-					'writtenDate' => formatDateTime( note.timestampWritten ),
+					'writtenDate' => formatDateTimeTZ( note.timestampWritten,
+											zoneName ),
 					'attachments' => (closure {
 						array attachmentList = [];
 						note.attachments.each() using( attachment ) {
@@ -997,7 +1016,7 @@ namespace ChatMCAM {
 		return [];
 	}
 
-	function _getClientNotes(number errandId ){
+	function _getClientNotes(number errandId, string zoneName ){
 		array list = [];
 		object errand = Workflow.Errand.loadClientView( errandId );
 		if( errand.client ) {
@@ -1011,7 +1030,8 @@ namespace ChatMCAM {
 					'id' => note.id,
 					'username' => note.writer.username,
 					'note' => note.note,
-					'writtenDate' => formatDateTime(note.timestampWritten),
+					'writtenDate' => formatDateTimeTZ(note.timestampWritten,
+										zoneName),
 					'attachments' => (closure {
 						array attachmentList = [];
 						note.attachments.each() using( attachment ) {
