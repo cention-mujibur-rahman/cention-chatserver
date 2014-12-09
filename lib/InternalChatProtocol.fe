@@ -641,7 +641,10 @@ namespace ChatMCAM {
 				}).invoke(),
 			'errand_notes' => ._getErrandNotes( errandId, zoneName ),
 			'client_notes' => ._getClientNotes( errandId, zoneName ),
-			'ipaddress' =>  session.ipAddress
+			'ipaddress' =>  session.ipAddress,
+			'nowInteractURL' => (F('now-interact') and session.nowInteractID
+				? F('now-interact.url').expand(session.nowInteractID, F('now-interact.username'), F('now-interact.password'))
+				: '')
 		]);
 	}
 
