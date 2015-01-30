@@ -755,6 +755,7 @@ namespace ChatMCAM {
 						errand.setValue('tags', errand.tags.addObject( tag ));
 						errand.save();
 					};
+					._reportOutcomeToNowInteract(session, tagIDs);
 				}else{
 					errand.setValue('tags', null);
 					errand.save();
@@ -763,7 +764,24 @@ namespace ChatMCAM {
 		}	
 		return JSON.valueToJSON(false);
 	}
-	
+
+	function _reportOutcomeToNowInteract( object session, array tags ) {
+		if( F('now-interact') and F('now-interact.outcome-url') and session.nowInteractID and tags ) {
+			// Right now we only know that Now Interact can receive one tag so
+			// we will send the first tag in the list
+			object curl = new Curl.Curl();
+			string url = F('now-interact.outcome.url').expand(session.nowInteractID, tags[0], session.user.username, F('now-interact.username'), F('now-interact.password'));
+			curl.setOption(Curl.CURLOPT_URL, url);
+			curl.setOption(Curl.CURLOPT_RETURNTRANSFER, 1);
+			curl.setOption(Curl.CURLOPT_TIMEOUT, 60);
+			if( curl.exec() ) {
+				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) ${url}: Yes");
+			} else {
+				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) ${url}: No");
+			}
+		}
+	}
+
 	function blockIPAddress( array params )	{	
 			string ipaddress = params['ip'];
 			number errandId = params['errand'].toNumber();
