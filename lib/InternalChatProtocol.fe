@@ -770,7 +770,7 @@ namespace ChatMCAM {
 			// Right now we only know that Now Interact can receive one tag so
 			// we will send the first tag in the list
 			object curl = new Curl.Curl();
-			string url = F('now-interact.outcome.url').expand(session.nowInteractID, tags[0], session.user.username, F('now-interact.username'), F('now-interact.password'));
+			string url = F('now-interact.outcome-url').expand(session.nowInteractID, tags[0], session.user.username, F('now-interact.username'), F('now-interact.password'));
 			curl.setOption(Curl.CURLOPT_URL, url);
 			curl.setOption(Curl.CURLOPT_RETURNTRANSFER, 1);
 			curl.setOption(Curl.CURLOPT_TIMEOUT, 60);
