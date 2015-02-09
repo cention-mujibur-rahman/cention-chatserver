@@ -483,52 +483,122 @@ namespace ChatMCAM {
 		return JSON.valueToJSON(false);
 	}
 	
+	
 	function sendChatHistoryEmailToClient( object session ){
 		object bodyContents = null;
 		string to = (session.client && session.client.email ? session.client.email.emailAddress : '');
-		object logClosure = closure ( string text ) {};
 		object connection = new Mail.Connection();
 		object to_addr = new Mail.Address( to );
 		object from_addr;
-		object fullUser= Workflow.User.load(session.user.id);
-		string zoneName = Workflow.TimeZone.getTimeZoneFromUser(fullUser);
+		array feedbackSettings;
+		number feedbackQueryPossition;
+			Logger.info(Logger.APPLICATION_CHAT, "!!ahish}");
+		if( F('satisfaction-feedback') ) {
+			  feedbackSettings = Workflow.Area.getFeedbackSettings( session.area.id );
+			  if( feedbackSettings ) {
+				feedbackQueryPossition = feedbackSettings[0]['possition'];
+			  }
+		}
 		bodyContents = (closure{
 			string body = "";
-			string htmlBody;
+			string htmlBody = "";
 			object message = new Mail.Message();
 			object text = new Mail.MessagePart();
 			object area = Workflow.Area.load(session.area.id);
 			array messages = Workflow.ChatMessage.listBySession( session.id );
+			object errand = (session.errand ? session.errand : null);
+			
 			from_addr = new Mail.Address( area.replyToEmailAddress );
 			message.header = new Mail.MessageHeader();
-			message.header.from.add( from_addr );		
+			message.header.from.add( from_addr );	
 			message.header.to.add(to_addr);		
 			message.header.subject = I('Chat history');
 			message = MailUtilities.setOutgoingHeader(message, area.replyToEmailAddress);
-			messages.each() using ( content ) {
+			
+			F('chat.history-send-to-client') and messages.each() using ( content ) {
 				string sender = (content.user
 								? (content.user.chatName ? content.user.chatName : content.user.username)
 								: (session.client ? session.client.name : I('No Name'))
 								);
-				body += "(${formatDateTimeTZ(content.timestampSent, zoneName)}) ${sender}: ${content.message}\r\n";
+				body += "(${formatDateTime(content.timestampSent)}) ${sender}: ${content.message}\r\n";				
+				if( F('satisfaction-feedback') and feedbackSettings ) {				
+					htmlBody += "(${formatDateTime(content.timestampSent)}) ${sender}: ${content.message}<br />";
+				}
 			};
+			
+			if( F('satisfaction-feedback') and feedbackSettings and  feedbackQueryPossition <= 2 ) {
+				htmlBody = .feedbackQuestionInMailBody(feedbackSettings, errand) + "<br />" + htmlBody;
+			}
+			
+			if( F('satisfaction-feedback') and feedbackSettings and  feedbackQueryPossition >= 3 ) {
+				htmlBody = htmlBody + .feedbackQuestionInMailBody(feedbackSettings, errand) + "<br />";
+			}
+			
 			body = Regexp.replaceAll("\r\n", body, "\n");
 			body = Regexp.replaceAll("\r", body, "\n");
 			body = Regexp.replaceAll("\n", body, "\r\n");
+			
+			htmlBody = Regexp.replaceAll("\r\n", htmlBody, "\n");
+			htmlBody = Regexp.replaceAll("\r", htmlBody, "\n");
+			htmlBody = Regexp.replaceAll("\n", htmlBody, "\r\n");
 
 			text.type = Mail.Mime.TYPETEXT;
 			text.subtype = "plain";
 			text.charset = "UTF-8";
-			text.content = body;
-			message.content = text;
+			text.content = body;		
+				
+			if( not htmlBody ) {
+				message.content = text;
+			} else {
+				object content = new Mail.MessageMultiPart();
+				object alternative = new Mail.MessageMultiPart();
+				object html = new Mail.MessagePart();
+				
+				html.encoding = Mail.Encoding.ENCQUOTEDPRINTABLE;
+				html.type = Mail.Mime.TYPETEXT;
+				html.subtype = "html";
+				html.charset = "UTF-8";
+				html.content = Mail.Connection.bit8('<html><body>' + htmlBody + '<br /></body></html>');
+				
+				alternative.subtype = "alternative";
+				alternative.addPart(text);
+				alternative.addPart(html);
+				
+				content.subtype = "related";
+				content.addPart(alternative);
+
+				message.content = content;
+			}		
 			return message;
 		}).invoke();
-
-		if( MailUtilities.sendMessage(connection, bodyContents, logClosure) ) {
-			Logger.info(Logger.APPLICATION_CHAT, "- Chat history email to [${to}] Done.");
-		} else {
-			Logger.info(Logger.APPLICATION_CHAT,"!! Failed chat history to send in email.");
+		
+		if( feedbackSettings or F('chat.history-send-to-client') ) {
+			if( MailUtilities.sendMessage(connection, bodyContents, null) ) {
+				log("- Chat history email send to [${to}] Done.");
+			} else {
+				log("!! Failed chat history to send in email.");
+			}
 		}
+	}
+	
+	function feedbackQuestionInMailBody( array feedbackSettings, object errand ) {
+		string body = '';
+		errand and feedbackSettings.each() using ( feedback ) {
+			string url = (F('external-feedback.url') ? F('external-feedback.url') : "http://${Network.getHostname()}") + "/errands/satisfaction/meter/-/errand/" + errand.id + "/feedback/" + feedback.id;
+			string answer1url = url + "/answer/1/action/" + feedback.answer1Action;
+			string answer2url = url + "/answer/2/action/" + feedback.answer2Action;
+			string answer3url = url + "/answer/3/action/" + feedback.answer3Action;
+			string answer4url = url + "/answer/4/action/" + feedback.answer4Action;
+			string answer5url = url + "/answer/5/action/" + feedback.answer5Action;
+
+			body = '{0}'.expand((feedback.editQuestion ? feedback.editQuestion : '')) +
+				(feedback.answer1 ? '<a href="{0}">{1}</a>'.expand(answer1url, feedback.answer1) : '') +
+				(feedback.answer2 ? '<br /><a href="{0}">{1}</a>'.expand(answer2url, feedback.answer2) : '') +
+				(feedback.answer3 ? '<br /><a href="{0}">{1}</a>'.expand(answer3url, feedback.answer3) : '') +
+				(feedback.answer4 ? '<br /><a href="{0}">{1}</a>'.expand(answer4url, feedback.answer4) : '') +
+				(feedback.answer5 ? '<br /><a href="{0}">{1}</a>'.expand(answer5url, feedback.answer5) : '') ;
+		};
+		return body;
 	}
 
 	function finishSession( array parameters ) {
@@ -544,7 +614,7 @@ namespace ChatMCAM {
 				session.close(false, false);
 				ChatQueueInterface.endChat(session);
 				Logger.info(Logger.APPLICATION_CHAT, "Chat session [${session.id}] has successfully closed.");
-				if( F('chat.history-send-to-client') ){
+				if( F('chat.history-send-to-client') or F('satisfaction-feedback') ){
 					monitor{
 						.sendChatHistoryEmailToClient( session );
 					}handle{
