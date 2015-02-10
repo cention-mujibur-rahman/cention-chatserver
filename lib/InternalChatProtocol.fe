@@ -583,20 +583,15 @@ namespace ChatMCAM {
 	
 	function feedbackQuestionInMailBody( array feedbackSettings, object errand ) {
 		string body = '';
-		errand and feedbackSettings.each() using ( feedback ) {
-			string url = (F('external-feedback.url') ? F('external-feedback.url') : "http://${Network.getHostname()}") + "/errands/satisfaction/meter/-/errand/" + errand.id + "/feedback/" + feedback.id;
-			string answer1url = url + "/answer/1/action/" + feedback.answer1Action;
-			string answer2url = url + "/answer/2/action/" + feedback.answer2Action;
-			string answer3url = url + "/answer/3/action/" + feedback.answer3Action;
-			string answer4url = url + "/answer/4/action/" + feedback.answer4Action;
-			string answer5url = url + "/answer/5/action/" + feedback.answer5Action;
-
-			body = '{0}'.expand((feedback.editQuestion ? feedback.editQuestion : '')) +
-				(feedback.answer1 ? '<a href="{0}">{1}</a>'.expand(answer1url, feedback.answer1) : '') +
-				(feedback.answer2 ? '<br /><a href="{0}">{1}</a>'.expand(answer2url, feedback.answer2) : '') +
-				(feedback.answer3 ? '<br /><a href="{0}">{1}</a>'.expand(answer3url, feedback.answer3) : '') +
-				(feedback.answer4 ? '<br /><a href="{0}">{1}</a>'.expand(answer4url, feedback.answer4) : '') +
-				(feedback.answer5 ? '<br /><a href="{0}">{1}</a>'.expand(answer5url, feedback.answer5) : '') ;
+		feedbackSettings.each() using ( feedback ) {
+			string url = (F('external-feedback.url') ? F('external-feedback.url') : 'http://' + Network.getHostname());
+			url += '/errands/satisfaction/meter/-/answer/' + String.base64encode("${errand.id}").toHex();
+			body = (feedback.editQuestion ? feedback.editQuestion : '') +
+				(feedback.answer1 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer1Secret, feedback.answer1) : '') +
+				(feedback.answer2 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer2Secret, feedback.answer2) : '') +
+				(feedback.answer3 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer3Secret, feedback.answer3) : '') +
+				(feedback.answer4 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer4Secret, feedback.answer4) : '') +
+				(feedback.answer5 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer5Secret, feedback.answer5) : '');
 		};
 		return body;
 	}
