@@ -835,14 +835,28 @@ namespace ChatMCAM {
 			// Right now we only know that Now Interact can receive one tag so
 			// we will send the first tag in the list
 			object curl = new Curl.Curl();
-			string url = F('now-interact.outcome-url').expand(session.nowInteractID, tags[0], session.user.username, F('now-interact.username'), F('now-interact.password'));
+			string url = F('now-interact.outcome-url').expand(
+					session.nowInteractID,
+					tags[0],
+					session.user.username,
+					F('now-interact.username'),
+					F('now-interact.password')
+				);
 			curl.setOption(Curl.CURLOPT_URL, url);
 			curl.setOption(Curl.CURLOPT_RETURNTRANSFER, 1);
 			curl.setOption(Curl.CURLOPT_TIMEOUT, 60);
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) ID: ${session.nowInteractID}");
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Tag: ${tags[0]}");
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Agent: ${session.user.username}");
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Username: " + F('now-interact.username'));
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Password: " + F('now-interact.password'));
+			Logger.info(Logger.APPLICATION_CHAT, "(now-interact) URL: ${url}");
 			if( curl.exec() ) {
-				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) ${url}: Yes");
+				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Result: Yes");
+				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Content: " +
+					Regexp.replaceAll("[\r\n]", curl.getContent(), ""));
 			} else {
-				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) ${url}: No");
+				Logger.info(Logger.APPLICATION_CHAT, "(now-interact) Result: No");
 			}
 		}
 	}
