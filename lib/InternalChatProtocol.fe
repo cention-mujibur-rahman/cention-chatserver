@@ -531,7 +531,7 @@ namespace ChatMCAM {
 			}
 			
 			if( F('satisfaction-feedback') and feedbackSettings and  feedbackQueryPossition >= 3 ) {
-				htmlBody = htmlBody + .feedbackQuestionInMailBody(feedbackSettings, errand) + "<br />";
+				htmlBody = htmlBody + "<br />" + .feedbackQuestionInMailBody(feedbackSettings, errand);
 			}
 			
 			body = Regexp.replaceAll("\r\n", body, "\n");
@@ -587,7 +587,7 @@ namespace ChatMCAM {
 			string url = (F('external-feedback.url') ? F('external-feedback.url') : 'http://' + Network.getHostname());
 			url += '/errands/satisfaction/meter/-/answer/' + String.base64encode("${errand.id}").toHex();
 			body = (feedback.editQuestion ? feedback.editQuestion : '') +
-				(feedback.answer1 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer1Secret, feedback.answer1) : '') +
+				(feedback.answer1 ? '<a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer1Secret, feedback.answer1) : '') +
 				(feedback.answer2 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer2Secret, feedback.answer2) : '') +
 				(feedback.answer3 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer3Secret, feedback.answer3) : '') +
 				(feedback.answer4 ? '<br /><a href="{0}">{1}</a>'.expand(url + '/' + feedback.answer4Secret, feedback.answer4) : '') +
